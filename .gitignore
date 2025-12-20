@@ -39,3 +39,34 @@
 
 # debug information files
 *.dwo
+
+# CMake build directories
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Qt files
+*.pro.user
+*.qrc.depends
+.qmake.stash
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.autosave
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# PostgreSQL
+*.backup
+*.dump
+
+# Temporary files
+/tmp/
