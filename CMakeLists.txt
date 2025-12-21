@@ -155,11 +155,11 @@ install(DIRECTORY docs/
 # Тесты (опционально)
 # ============================================================================
 
-option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_TESTS "Build tests" ON)
 
 if(BUILD_TESTS)
     enable_testing()
-    # add_subdirectory(tests)
+    add_subdirectory(tests)
 endif()
 
 # ============================================================================
