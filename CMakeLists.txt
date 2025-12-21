@@ -29,7 +29,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt5 5.15 REQUIRED COMPONENTS
+find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
@@ -37,7 +37,7 @@ find_package(Qt5 5.15 REQUIRED COMPONENTS
 )
 
 # PostgreSQL
-find_package(PostgreSQL REQUIRED)
+find_package(PostgreSQL REQUIRED CONFIG)
 
 # ============================================================================
 # Исходные файлы
@@ -115,10 +115,10 @@ target_sources(TariffSystemCore INTERFACE
 
 # target_link_libraries(TariffSystem
 #     TariffSystemCore
-#     Qt5::Core
-#     Qt5::Gui
-#     Qt5::Widgets
-#     Qt5::Sql
+#     Qt6::Core
+#     Qt6::Gui
+#     Qt6::Widgets
+#     Qt6::Sql
 #     ${PostgreSQL_LIBRARIES}
 # )
 
@@ -172,7 +172,7 @@ message(STATUS "TariffSystem Configuration:")
 message(STATUS "===================================")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "Qt5 Version: ${Qt5_VERSION}")
+message(STATUS "Qt6 Version: ${Qt6_VERSION}")
 message(STATUS "PostgreSQL Found: ${PostgreSQL_FOUND}")
 if(PostgreSQL_FOUND)
     message(STATUS "PostgreSQL Include: ${PostgreSQL_INCLUDE_DIRS}")
