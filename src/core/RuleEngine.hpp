@@ -10,6 +10,7 @@
 #include "../model/Rule.hpp"
 #include "../model/Order.hpp"
 #include "../model/Tariff.hpp"
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -56,7 +57,7 @@ public:
             return expression.evaluate(context);
         } catch (const std::exception& e) {
             throw CalculationException(
-                "Ошибка при вычислении выражения: " + e.what()
+                std::string("Ошибка при вычислении выражения: ") + e.what()
             );
         }
     }
@@ -74,7 +75,7 @@ public:
             return boolValue && *boolValue;
         } catch (const std::exception& e) {
             throw CalculationException(
-                "Ошибка при проверке условия: " + e.what()
+                std::string("Ошибка при проверке условия: ") + e.what()
             );
         }
     }
