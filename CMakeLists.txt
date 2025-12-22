@@ -40,11 +40,14 @@ find_package(Qt6 REQUIRED COMPONENTS
 find_package(PostgreSQL REQUIRED CONFIG)
 
 # ============================================================================
-# Исходные файлы
+# Библиотеки проекта
 # ============================================================================
 
-# Заголовочные файлы модели
-set(MODEL_HEADERS
+# ----------------------------------------------------------------------------
+# Библиотека модели предметной области
+# ----------------------------------------------------------------------------
+add_library(TariffModel STATIC
+    src/model/Model.cpp
     src/model/Classifier.hpp
     src/model/Parameter.hpp
     src/model/Rule.hpp
@@ -53,89 +56,97 @@ set(MODEL_HEADERS
     src/model/Order.hpp
 )
 
-# Заголовочные файлы бизнес-логики
-set(CORE_HEADERS
+target_include_directories(TariffModel PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_compile_features(TariffModel PUBLIC cxx_std_20)
+
+# ----------------------------------------------------------------------------
+# Библиотека бизнес-логики
+# ----------------------------------------------------------------------------
+add_library(TariffCore STATIC
+    src/core/Core.cpp
     src/core/RuleEngine.hpp
     src/core/CostCalculator.hpp
     src/core/OptimalSearch.hpp
 )
 
-# Заголовочные файлы утилит
-set(UTILS_HEADERS
+target_include_directories(TariffCore PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(TariffCore PUBLIC
+    TariffModel
+)
+
+target_compile_features(TariffCore PUBLIC cxx_std_20)
+
+# ----------------------------------------------------------------------------
+# Библиотека утилит и работы с БД
+# ----------------------------------------------------------------------------
+add_library(TariffUtils STATIC
+    src/utils/Utils.cpp
     src/utils/Types.hpp
     src/utils/Database.hpp
     src/utils/Repository.hpp
 )
 
-# GUI заголовочные файлы (будут добавлены позже)
-set(GUI_HEADERS
-    # src/gui/MainWindow.hpp
-    # src/gui/ServiceCatalog.hpp
-    # src/gui/TariffEditor.hpp
-    # src/gui/OrderForm.hpp
-    # src/gui/SearchWidget.hpp
-)
-
-# GUI исходные файлы (будут добавлены позже)
-set(GUI_SOURCES
-    # src/gui/MainWindow.cpp
-    # src/gui/ServiceCatalog.cpp
-    # src/gui/TariffEditor.cpp
-    # src/gui/OrderForm.cpp
-    # src/gui/SearchWidget.cpp
-)
-
-# Главный файл приложения (будет добавлен позже)
-# set(MAIN_SOURCE src/main.cpp)
-
-# ============================================================================
-# Библиотека модели и логики
-# ============================================================================
-
-add_library(TariffSystemCore INTERFACE)
-
-target_include_directories(TariffSystemCore INTERFACE
+target_include_directories(TariffUtils PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${PostgreSQL_INCLUDE_DIRS}
 )
 
-target_sources(TariffSystemCore INTERFACE
-    ${MODEL_HEADERS}
-    ${CORE_HEADERS}
-    ${UTILS_HEADERS}
+target_link_libraries(TariffUtils PUBLIC
+    TariffModel
+    PostgreSQL::PostgreSQL
+)
+
+target_compile_features(TariffUtils PUBLIC cxx_std_20)
+
+# ----------------------------------------------------------------------------
+# Общая библиотека для удобства
+# ----------------------------------------------------------------------------
+add_library(TariffSystemCore INTERFACE)
+
+target_link_libraries(TariffSystemCore INTERFACE
+    TariffModel
+    TariffCore
+    TariffUtils
 )
 
 # ============================================================================
-# Исполняемый файл приложения (временно закомментирован)
+# GUI приложение
 # ============================================================================
 
-# add_executable(TariffSystem
-#     ${MAIN_SOURCE}
-#     ${GUI_SOURCES}
-#     ${GUI_HEADERS}
-# )
+add_executable(TariffSystem
+    src/main.cpp
+    src/gui/MainWindow.cpp
+    src/gui/MainWindow.hpp
+)
 
-# target_link_libraries(TariffSystem
-#     TariffSystemCore
-#     Qt6::Core
-#     Qt6::Gui
-#     Qt6::Widgets
-#     Qt6::Sql
-#     ${PostgreSQL_LIBRARIES}
-# )
+target_link_libraries(TariffSystem PRIVATE
+    TariffSystemCore
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Sql
+    PostgreSQL::PostgreSQL
+)
 
-# target_include_directories(TariffSystem PRIVATE
-#     ${CMAKE_CURRENT_SOURCE_DIR}/src
-#     ${PostgreSQL_INCLUDE_DIRS}
-# )
+target_include_directories(TariffSystem PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
 # ============================================================================
 # Установка
 # ============================================================================
 
-# install(TARGETS TariffSystem
-#     RUNTIME DESTINATION bin
-# )
+install(TARGETS TariffSystem TariffModel TariffCore TariffUtils
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
 
 # Установка SQL скриптов
 install(DIRECTORY database/
@@ -180,6 +191,14 @@ if(PostgreSQL_FOUND)
     message(STATUS "PostgreSQL Include: ${PostgreSQL_INCLUDE_DIRS}")
     message(STATUS "PostgreSQL Library: ${PostgreSQL_LIBRARIES}")
 endif()
+message(STATUS "")
+message(STATUS "Build targets:")
+message(STATUS "  Libraries:")
+message(STATUS "    - TariffModel (model domain objects)")
+message(STATUS "    - TariffCore (business logic)")
+message(STATUS "    - TariffUtils (utilities and database)")
+message(STATUS "  Executables:")
+message(STATUS "    - TariffSystem (main GUI application)")
 message(STATUS "===================================")
 message(STATUS "")
 
