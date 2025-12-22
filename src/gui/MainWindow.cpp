@@ -189,16 +189,16 @@ void MainWindow::connectToDatabase() {
     }
     
     try {
-        auto db = std::make_shared<DatabaseManager>();
-        DatabaseManager::ConnectionParams params;
+        auto db = std::make_shared<TariffSystem::Database::DatabaseManager>();
+        TariffSystem::Database::DatabaseManager::ConnectionParams params;
         params.host = host.toStdString();
         params.database = dbName.toStdString();
         params.user = user.toStdString();
         params.password = password.toStdString();
-        params.port = 5432;
+        //params.port = 5432;
         
         db->connect(params);
-        repository_ = std::make_shared<TariffSystemRepository>(db);
+        //repository_ = std::make_shared<TariffSystemRepository>(db);
         
         statusBar()->showMessage(tr("Подключено к БД: %1@%2").arg(dbName, host), 5000);
         

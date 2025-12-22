@@ -113,10 +113,10 @@ public:
      */
     struct ConnectionParams {
         String host = "localhost";
-        String port = "5432";
+        String port = "5433";  // PostgreSQL 15 (5432 занят PostgreSQL 17)
         String database = "tariff_system";
         String user = "postgres";
-        String password = "";
+        String password = "postgres";
     };
     
     /**
@@ -217,10 +217,14 @@ public:
             throw DatabaseException("Нет подключения к БД");
         }
         
-        // Подготовка параметров
+        // Подготовка параметров - строка "NULL" означает NULL значение
         std::vector<const char*> paramValues;
         for (const auto& param : params) {
-            paramValues.push_back(param.c_str());
+            if (param == "NULL") {
+                paramValues.push_back(nullptr);
+            } else {
+                paramValues.push_back(param.c_str());
+            }
         }
         
         PGresult* result = PQexecParams(
