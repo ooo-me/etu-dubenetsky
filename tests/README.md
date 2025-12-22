@@ -14,6 +14,8 @@ tests/
 │   └── core_test.cpp   # Тесты для Expression, Rule, RuleEngine, CostCalculator, OptimalSearcher
 ├── integration/        # Интеграционные тесты
 │   └── integration_test.cpp  # Полные сценарии использования
+├── database/           # Тесты SQL процедур PostgreSQL
+│   └── database_test.cpp    # Тесты INS_CLASS, INS_FUNCT, CALC_VAL_F и др.
 └── CMakeLists.txt      # Конфигурация сборки тестов
 ```
 
@@ -57,9 +59,36 @@ ctest --output-on-failure --verbose
 ./tests/model_test
 ./tests/core_test
 ./tests/integration_test
+./tests/database_test  # Требует PostgreSQL
 
 # Или использовать цель make
 cmake --build build --target run_all_tests
+```
+
+### Настройка для database_test
+
+Перед запуском тестов БД установите переменные окружения:
+
+```bash
+# Linux/macOS
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_NAME=tariff_system
+export DB_USER=postgres
+export DB_PASSWORD=your_password
+
+# Windows (PowerShell)
+$env:DB_HOST="localhost"
+$env:DB_PORT="5432"
+$env:DB_NAME="tariff_system"
+$env:DB_USER="postgres"
+$env:DB_PASSWORD="your_password"
+```
+
+Убедитесь, что:
+1. PostgreSQL запущен
+2. База данных `tariff_system` создана
+3. Все SQL скрипты выполнены (см. `database/README.md`)
 ```
 
 ## Описание тестов
@@ -126,6 +155,34 @@ TEST_F(OptimalTariffSelectionTest, FindCheapestTariff)
 TEST_F(ConditionalRulesTest, HeavyCargoWithSurcharge)
 ```
 
+### 4. Тесты базы данных (database_test)
+
+**Количество тестов:** 15+
+
+**Покрываемые процедуры:**
+- `INS_CLASS` - Создание классов в иерархии
+- `INS_FUNCT` - Создание функций с аргументами
+- `INS_OB` - Создание объектов (услуги, тарифы, заказы)
+- `UPDATE_VAL_ROLE` - Обновление значений параметров
+- `CALC_VAL_F` - Вычисление значений функций
+- `VALIDATE_ORDER` - Валидация заказов
+- `FIND_VAL_ALL_PAR` - Получение всех параметров объекта
+
+**Примеры тестов:**
+```cpp
+TEST_F(DatabaseTestBase, INS_CLASS_CreateRootClass)
+TEST_F(DatabaseTestBase, INS_FUNCT_WithArguments)
+TEST_F(DatabaseTestBase, INS_OB_CreateService)
+TEST_F(DatabaseTestBase, CALC_VAL_F_SimpleCalculation)
+TEST_F(DatabaseTestBase, Integration_CreateCompleteTariff)
+```
+
+**ВАЖНО:** Для запуска database_test требуется:
+- PostgreSQL установлен и запущен
+- База данных `tariff_system` создана
+- Выполнены все SQL скрипты (см. database/README.md)
+- Настроены переменные окружения (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+
 ## Покрытие кода
 
 Тесты обеспечивают comprehensive покрытие:
@@ -133,6 +190,7 @@ TEST_F(ConditionalRulesTest, HeavyCargoWithSurcharge)
 - **Модель предметной области:** ~95%
 - **Бизнес-логика:** ~90%
 - **Интеграционные сценарии:** Все основные use cases
+- **SQL процедуры:** Все основные процедуры конструктора и калькулятора
 
 ## Тестовые данные
 

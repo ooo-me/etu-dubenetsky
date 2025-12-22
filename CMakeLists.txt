@@ -63,6 +63,8 @@ set(CORE_HEADERS
 # Заголовочные файлы утилит
 set(UTILS_HEADERS
     src/utils/Types.hpp
+    src/utils/Database.hpp
+    src/utils/Repository.hpp
 )
 
 # GUI заголовочные файлы (будут добавлены позже)

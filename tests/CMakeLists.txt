@@ -75,12 +75,34 @@ target_include_directories(integration_test PRIVATE
 gtest_discover_tests(integration_test)
 
 # ============================================================================
+# Тесты базы данных (PostgreSQL процедуры)
+# ============================================================================
+
+add_executable(database_test
+    database/database_test.cpp
+)
+
+target_link_libraries(database_test
+    PRIVATE
+        TariffSystemCore
+        GTest::gtest
+        GTest::gtest_main
+        PostgreSQL::PostgreSQL
+)
+
+target_include_directories(database_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+
+gtest_discover_tests(database_test)
+
+# ============================================================================
 # Цель для запуска всех тестов
 # ============================================================================
 
 add_custom_target(run_all_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure --verbose
-    DEPENDS model_test core_test integration_test
+    DEPENDS model_test core_test integration_test database_test
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Запуск всех тестов"
 )
@@ -98,5 +120,6 @@ message(STATUS "Test executables:")
 message(STATUS "  - model_test (${CMAKE_CURRENT_SOURCE_DIR}/model/model_test.cpp)")
 message(STATUS "  - core_test (${CMAKE_CURRENT_SOURCE_DIR}/core/core_test.cpp)")
 message(STATUS "  - integration_test (${CMAKE_CURRENT_SOURCE_DIR}/integration/integration_test.cpp)")
+message(STATUS "  - database_test (${CMAKE_CURRENT_SOURCE_DIR}/database/database_test.cpp)")
 message(STATUS "===================================")
 message(STATUS "")
