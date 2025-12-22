@@ -4,7 +4,7 @@
  */
 
 #include "MainWindow.hpp"
-#include "../utils/Repository.hpp"
+#include "../core/DomainService.hpp"
 #include "../utils/Database.hpp"
 
 #include <QMenuBar>
@@ -30,7 +30,7 @@ MainWindow::MainWindow(QWidget* parent)
     createToolBars();
     createStatusBar();
     
-    statusBar()->showMessage(tr("Готов к работе"), 3000);
+    statusBar()->showMessage(tr("Готов к работе. Подключитесь к БД для начала работы"), 5000);
 }
 
 MainWindow::~MainWindow() = default;
@@ -198,12 +198,18 @@ void MainWindow::connectToDatabase() {
         //params.port = 5432;
         
         db->connect(params);
-        //repository_ = std::make_shared<TariffSystemRepository>(db);
         
-        statusBar()->showMessage(tr("Подключено к БД: %1@%2").arg(dbName, host), 5000);
+        // Создание DomainService для управления всеми операциями
+        domainService_ = std::make_shared<TariffSystem::Core::DomainService>(db);
+        
+        statusBar()->showMessage(tr("Подключено к БД: %1@%2 | DomainService инициализирован").arg(dbName, host), 5000);
         
         QMessageBox::information(this, tr("Подключение"),
-            tr("Успешно подключено к базе данных!"));
+            tr("Успешно подключено к базе данных!\n\n"
+               "DomainService готов к работе:\n"
+               "• Оркестрация бизнес-логики\n"
+               "• Персистентность данных\n"
+               "• Транзакционность операций"));
     }
     catch (const std::exception& e) {
         QMessageBox::critical(this, tr("Ошибка подключения"),

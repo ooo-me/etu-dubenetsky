@@ -16,6 +16,8 @@ tests/
 │   └── integration_test.cpp  # Полные сценарии использования
 ├── database/           # Тесты SQL процедур PostgreSQL
 │   └── database_test.cpp    # Тесты INS_CLASS, INS_FUNCT, CALC_VAL_F и др.
+├── domain/             # Тесты DomainService (оркестрация и персистентность)
+│   └── domain_service_test.cpp  # Комплексные тесты интеграции C++ и PostgreSQL
 └── CMakeLists.txt      # Конфигурация сборки тестов
 ```
 
@@ -60,12 +62,13 @@ ctest --output-on-failure --verbose
 ./tests/core_test
 ./tests/integration_test
 ./tests/database_test  # Требует PostgreSQL
+./tests/domain_service_test  # Требует PostgreSQL
 
 # Или использовать цель make
 cmake --build build --target run_all_tests
 ```
 
-### Настройка для database_test
+### Настройка для database_test и domain_service_test
 
 Перед запуском тестов БД установите переменные окружения:
 
@@ -204,7 +207,7 @@ TEST_F(DatabaseTestBase, Integration_CreateCompleteTariff)
 При успешном прохождении всех тестов:
 
 ```
-[==========] Running 85 tests from 20 test suites.
+[==========] Running 100+ tests from 25 test suites.
 [----------] Global test environment set-up.
 [----------] 10 tests from ParameterTest
 [ RUN      ] ParameterTest.BasicProperties
@@ -214,8 +217,14 @@ TEST_F(DatabaseTestBase, Integration_CreateCompleteTariff)
 [ RUN      ] ExpressionTest.ArithmeticAddition
 [       OK ] ExpressionTest.ArithmeticAddition (0 ms)
 ...
-[==========] 85 tests from 20 test suites ran. (15 ms total)
-[  PASSED  ] 85 tests.
+[----------] 15 tests from DomainServiceTest
+[ RUN      ] DomainServiceTest.CreateClassifier_Success
+[       OK ] DomainServiceTest.CreateClassifier_Success (5 ms)
+[ RUN      ] DomainServiceTest.RealWorldScenario_CompleteOrderFlow
+[       OK ] DomainServiceTest.RealWorldScenario_CompleteOrderFlow (25 ms)
+...
+[==========] 100+ tests from 25 test suites ran. (150 ms total)
+[  PASSED  ] 100+ tests.
 ```
 
 ## Непрерывная интеграция

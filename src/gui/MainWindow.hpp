@@ -18,6 +18,12 @@ namespace TariffSystem {
 
 class TariffSystemRepository;
 
+namespace Core {
+    class DomainService;
+}
+
+using Core::DomainService;
+
 /**
  * @brief Главное окно приложения
  */
@@ -84,7 +90,7 @@ private:
     void createStatusBar();
 
     QTabWidget* centralTabWidget_;
-    std::shared_ptr<TariffSystemRepository> repository_;
+    std::shared_ptr<DomainService> domainService_;  // DomainService вместо Repository
 };
 
 } // namespace TariffSystem

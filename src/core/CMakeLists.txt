@@ -4,6 +4,7 @@ add_library(TariffCore STATIC
     RuleEngine.hpp
     CostCalculator.hpp
     OptimalSearch.hpp
+    DomainService.hpp
 )
 
 target_include_directories(TariffCore PUBLIC
