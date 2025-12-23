@@ -1,0 +1,64 @@
+# Top-level clang-format configuration
+BasedOnStyle: Microsoft
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+
+# Braces
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Spacing rules
+# - No space between function name and '('
+# - Space before parens only for control statements (if/for/while...)
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpaceInEmptyParentheses: false
+SpacesInSquareBrackets: false
+SpacesBeforeTrailingComments: 1
+SpaceAfterCStyleCast: true
+
+# Return type and function name on one line with exactly one space
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 1000
+
+# Extern "C" block indentation disabled
+IndentExternBlock: NoIndent
+
+# Pointers and references
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+
+# Access modifiers
+AccessModifierOffset: -4
+
+# Constructor initializer lists
+# Force one initializer per line and break after ':' so commas remain trailing
+PackConstructorInitializers: Never
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerIndentWidth: 4
+
+# Includes
+SortIncludes: false
+IncludeBlocks: Preserve
+
+# Alignments
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: Right
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveBitFields: false
+AlignConsecutiveMacros: false
+AlignEscapedNewlines: Left
+AlignTrailingComments: false
+
+# Line breaks and wrapping
+BinPackArguments: false
+BinPackParameters: false
+PenaltyBreakBeforeFirstCallParameter: 50
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 50
