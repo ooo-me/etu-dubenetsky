@@ -4,11 +4,15 @@
 // Описание: Интеграционные тесты SQL процедур через Repository
 // ============================================================================
 
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
 #include <gtest/gtest.h>
 #include "utils/Database.hpp"
 #include "utils/Repository.hpp"
+
+// Windows-specific includes only for Windows platform
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#endif
 
 using namespace TariffSystem;
 using namespace TariffSystem::Database;
@@ -205,7 +209,6 @@ TEST_F(DatabaseTestBase, INS_OB_CreateService) {
         classId,
         "SERVICE_001",
         "Тестовая услуга",
-        std::nullopt,
         "Описание услуги"
     );
 
@@ -229,8 +232,7 @@ TEST_F(DatabaseTestBase, INS_OB_CreateTariff) {
     Integer tariffId = objects.createObject(
         classId,
         "TARIFF_001",
-        "Тестовый тариф",
-        std::nullopt
+        "Тестовый тариф"
     );
 
     EXPECT_GT(tariffId, 0);
@@ -326,13 +328,13 @@ TEST_F(DatabaseTestBase, VALIDATE_ORDER_CheckValidOrder) {
 
     try {
         // Попытка валидации
-        auto [isValid, message] = calculations.validateOrder(orderId);
+        bool isValid = calculations.validateOrder(orderId);
 
         // Любой результат приемлем, главное что процедура выполнилась
         EXPECT_TRUE(isValid || !isValid);
 
         if (!isValid) {
-            std::cout << "Сообщение валидации: " << message << std::endl;
+            std::cout << "Заказ не прошел валидацию" << std::endl;
         }
     }
     catch (const DatabaseException& e) {
@@ -451,9 +453,10 @@ TEST_F(DatabaseTestBase, Integration_CreateOrderAndCalculateCost) {
 // ============================================================================
 
 int main(int argc, char** argv) {
-
-    SetConsoleCP(65001);  //
-    SetConsoleOutputCP(65001); //
+#ifdef _WIN32
+    SetConsoleCP(65001);       // UTF-8 для ввода
+    SetConsoleOutputCP(65001); // UTF-8 для вывода
+#endif
     ::testing::InitGoogleTest(&argc, argv);
 
     return RUN_ALL_TESTS();
