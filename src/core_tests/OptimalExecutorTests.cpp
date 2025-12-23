@@ -68,6 +68,9 @@ TEST_F(OptimalExecutorTest, FindCheapestTransportForLightCargo)
     // 1. Подготовка данных
     auto serviceType = CreateTransportServiceType();
     
+    // Создаём единицу измерения явно для этого теста
+    auto hourUnit = CreateTestUnit("hour", "Час");
+    
     auto executor1 = CreateTestExecutor("TC_FAST", "ТК Быстрый", true);
     auto executor2 = CreateTestExecutor("TC_ECON", "ТК Экономный", true);
     auto executor3 = CreateTestExecutor("TC_RELIABLE", "ТК Надёжный", true);
@@ -75,7 +78,6 @@ TEST_F(OptimalExecutorTest, FindCheapestTransportForLightCargo)
     // Создаём тарифы с разными ставками (тариф на 4 часа)
     // Данные из файла: 0.5т - Тариф 4ч = 1900 руб, Стоимость часа = 420 руб
     auto tariff1 = CreateTestTariff(serviceType.id, executor1.id, "2025-01-01", "2025-12-31", true, 18.0);
-    auto hourUnit = service_->GetAllUnits()[0]; // Предполагаем что час уже создан
     CreateTestTariffRate(tariff1.id, "HOUR_RATE", "Стоимость часа", 500.0, hourUnit.id);
     
     auto tariff2 = CreateTestTariff(serviceType.id, executor2.id, "2025-01-01", "2025-12-31", true, 18.0);
@@ -107,15 +109,16 @@ TEST_F(OptimalExecutorTest, FindTransportForHeavyCargo)
     // 1. Подготовка данных
     auto serviceType = CreateTransportServiceType();
     
+    // Создаём единицы измерения явно
+    auto hourUnit = CreateTestUnit("hour", "Час");
+    auto kmUnit = CreateTestUnit("km", "Километр");
+    
     auto executor1 = CreateTestExecutor("TC_HEAVY1", "ТК Тяжеловоз 1", true);
     auto executor2 = CreateTestExecutor("TC_HEAVY2", "ТК Тяжеловоз 2", true);
     
     // Тарифы для тяжёлого груза (5т, 20-30м³)
     // Данные из файла: 5т - Тариф 8ч = 6280 руб, Стоимость часа = 785 руб, 
     // руб/км город = 23, руб/км область = 25
-    auto hourUnit = service_->GetAllUnits()[0];
-    auto kmUnit = service_->GetAllUnits()[1];
-    
     auto tariff1 = CreateTestTariff(serviceType.id, executor1.id, "2025-01-01", "2025-12-31", true, 18.0);
     CreateTestTariffRate(tariff1.id, "HOUR_RATE", "Стоимость часа", 785.0, hourUnit.id);
     CreateTestTariffRate(tariff1.id, "KM_CITY", "Стоимость км по городу", 23.0, kmUnit.id);
@@ -148,15 +151,15 @@ TEST_F(OptimalExecutorTest, FindOptimalStorageForPallets)
     // 1. Подготовка данных
     auto serviceType = CreateStorageServiceType();
     
+    // Создаём единицы измерения явно
+    auto dayUnit = CreateTestUnit("day", "Сутки");
+    
     auto storage1 = CreateTestExecutor("WAREHOUSE_1", "Склад №1", true);
     auto storage2 = CreateTestExecutor("WAREHOUSE_2", "Склад №2", true);
     auto storage3 = CreateTestExecutor("WAREHOUSE_3", "Склад №3", true);
     
     // Тарифы на хранение
     // Данные из файла: Хранение паллет = 8-16 руб/сутки
-    auto palletUnit = service_->GetAllUnits()[0];
-    auto dayUnit = service_->GetAllUnits()[1];
-    
     auto tariff1 = CreateTestTariff(serviceType.id, storage1.id, "2025-01-01", "2025-12-31", true, 20.0);
     CreateTestTariffRate(tariff1.id, "STORAGE_RATE", "Хранение паллет", 16.0, dayUnit.id);
     
@@ -192,11 +195,12 @@ TEST_F(OptimalExecutorTest, FilterByTariffValidityDate)
     // 1. Подготовка данных
     auto serviceType = CreateTransportServiceType();
     
+    // Создаём единицу измерения явно
+    auto hourUnit = CreateTestUnit("hour", "Час");
+    
     auto executor1 = CreateTestExecutor("TC_2024", "ТК Старый тариф", true);
     auto executor2 = CreateTestExecutor("TC_2025", "ТК Новый тариф", true);
     auto executor3 = CreateTestExecutor("TC_FUTURE", "ТК Будущий тариф", true);
-    
-    auto hourUnit = service_->GetAllUnits()[0];
     
     // Тариф, который уже истёк
     auto tariff1 = CreateTestTariff(serviceType.id, executor1.id, "2024-01-01", "2024-12-31", true, 18.0);
@@ -241,11 +245,12 @@ TEST_F(OptimalExecutorTest, VatCalculation)
     // 1. Подготовка данных
     auto serviceType = CreateTransportServiceType();
     
+    // Создаём единицу измерения явно
+    auto hourUnit = CreateTestUnit("hour", "Час");
+    
     auto executor1 = CreateTestExecutor("TC_WITH_VAT_18", "ТК с НДС 18%", true);
     auto executor2 = CreateTestExecutor("TC_WITH_VAT_20", "ТК с НДС 20%", true);
     auto executor3 = CreateTestExecutor("TC_NO_VAT", "ТК без НДС", true);
-    
-    auto hourUnit = service_->GetAllUnits()[0];
     
     // Тариф с НДС 18% (старая ставка)
     auto tariff1 = CreateTestTariff(serviceType.id, executor1.id, "2024-01-01", "2024-12-31", true, 18.0);
@@ -316,12 +321,13 @@ TEST_F(OptimalExecutorTest, RealWorldScenarioComparison)
     
     auto serviceType = CreateTransportServiceType();
     
+    // Создаём единицы измерения явно
+    auto hourUnit = CreateTestUnit("hour", "Час");
+    auto kmUnit = CreateTestUnit("km", "Километр");
+    
     auto executor1 = CreateTestExecutor("TC_COMPANY_A", "Компания А", true);
     auto executor2 = CreateTestExecutor("TC_COMPANY_B", "Компания Б", true);
     auto executor3 = CreateTestExecutor("TC_COMPANY_C", "Компания В", true);
-    
-    auto hourUnit = service_->GetAllUnits()[0];
-    auto kmUnit = service_->GetAllUnits()[1];
     
     // Компания А - средние цены
     auto tariff1 = CreateTestTariff(serviceType.id, executor1.id, "2025-01-01", "2025-12-31", true, 18.0);
