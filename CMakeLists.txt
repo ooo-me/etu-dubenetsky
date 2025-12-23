@@ -30,4 +30,13 @@ find_package(Qt6 REQUIRED COMPONENTS
 # PostgreSQL
 find_package(PostgreSQL REQUIRED CONFIG)
 
+# Опция для включения тестов
+option(BUILD_TESTING "Build the testing tree" OFF)
+
+# GTest для тестов (если тесты включены)
+if(BUILD_TESTING)
+    find_package(GTest REQUIRED)
+    enable_testing()
+endif()
+
 add_subdirectory(src)
