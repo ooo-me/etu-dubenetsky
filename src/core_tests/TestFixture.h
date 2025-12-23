@@ -28,7 +28,7 @@ protected:
         // Создание подключения к тестовой БД
         db::DatabaseManager::ConnectionParams params;
         params.host = "localhost";
-        params.port = "5433"; // PostgreSQL 15
+        params.port = "5433"; // Кастомный порт для тестовой БД PostgreSQL
         params.database = "tariff_test"; // Отдельная БД для тестов
         params.user = "postgres";
         params.password = "postgres";
