@@ -42,11 +42,13 @@
 
 # CMake build directories
 build/
+out/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 Makefile
+*.cmake
 
 # Qt files
 *.pro.user

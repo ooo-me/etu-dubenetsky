@@ -1,7 +1,5 @@
 #pragma once
 
-#pragma once
-
 #include "Models.h"
 
 #include <db/DbApi.h>

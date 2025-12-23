@@ -9,15 +9,15 @@
 ```
 database/
 ├── schema/                 # DDL скрипты для создания таблиц
-│   ├── 01_tables.sql      # Создание 16 таблиц
-│   └── 02_indexes.sql     # Создание индексов и ограничений
-├── procedures/            # Хранимые процедуры
+│   ├── 01_tables.sql      # Создание 28 таблиц
+│   └── 02_indexes.sql     # Создание 48 индексов и ограничений
+├── procedures/            # Хранимые процедуры (118 процедур)
 │   ├── constructor/       # Конструктор тарифов
-│   │   └── constructor.sql  # INS_CLASS, INS_FUNCT, INS_OB, и др.
+│   │   └── constructor.sql  # INS_*, UPD_*, DEL_* процедуры
 │   ├── calculator/        # Калькулятор стоимости
-│   │   └── calculator.sql   # CALC_PRED, CALC_AR, CALC_LOG, CALC_VAL_F
+│   │   └── calculator.sql   # CALC_ORDER_COST, FIND_OPTIMAL_*, и др.
 │   └── utils/             # Утилиты
-│       └── utils.sql        # VALIDATE_ORDER, GET_TARIFF_SUMMARY, и др.
+│       └── utils.sql        # GET_ALL_*, VALIDATE_ORDER, и др.
 └── test-data/             # Тестовые данные
     ├── 01_classifiers.sql # Заполнение классификаторов
     └── 02_tariffs.sql     # Примеры тарифов
@@ -30,8 +30,8 @@ database/
 1. Скачать установщик с https://www.postgresql.org/download/windows/
 2. Запустить установщик
 3. Выбрать компоненты: PostgreSQL Server, pgAdmin 4
-4. Установить пароль для пользователя postgres
-5. Порт по умолчанию: 5432
+4. Установить пароль для пользователя postgres (по умолчанию: postgres)
+5. Порт: 5433 (или 5432 по умолчанию)
 
 ### Linux (Ubuntu/Debian)
 
@@ -197,20 +197,25 @@ psql -U postgres -d tariff_system
 -- Проверка таблиц
 \dt
 
--- Ожидаемые таблицы:
--- CHEM_CLASS, FUNCT_R, ARG_FUNCT, PROD, ROLE_VAL, PARAMETR1, 
--- PAR_CLASS1, PAR_PROD2, CONST, FUN_COMP, FACT_FUN, FACT_PAR,
--- DECISION_RULE, EI, ENUM_VAL_R, POS_ENUM
+-- Ожидаемые таблицы (28 таблиц):
+-- Метамодель: EI, ENUM_VAL_R, POS_ENUM, CHEM_CLASS, FUNCT_R, 
+--   ARG_FUNCT, PROD, CONST, PARAMETR1, PAR_CLASS1
+-- Предметная область: SERVICE_TYPE, SERVICE_TYPE_PARAM, EXECUTOR,
+--   TARIFF, TARIFF_RATE, TARIFF_RULE, SERVICE_ORDER, ORDER_PARAM,
+--   ORDER_ITEM, ORDER_ITEM_PARAM
+-- Дополнительные: COEFFICIENT, TARIFF_COEFFICIENT, PAR_PROD2,
+--   ROLE_VAL, FUN_COMP, FACT_FUN, FACT_PAR, DECISION_RULE
 
--- Проверка процедур
+-- Проверка процедур (118 процедур)
 \df
 
--- Ожидаемые процедуры:
--- INS_CLASS, INS_FUNCT, INS_ARG_FUN, INS_CONST, INS_VAL_ENUM,
--- INS_OB, INS_FACT_FUN, WRITE_FACT_PAR, INS_DEC_F,
--- UPDATE_VAL_ROLE, FIND_VAL_PAR, FIND_VAL_ALL_PAR,
--- CALC_PRED, CALC_AR, CALC_LOG, CALC_VAL_F, CASE_ARG,
--- VALIDATE_ORDER, GET_TARIFF_SUMMARY, и др.
+-- Примеры процедур:
+-- Конструктор: INS_EI, INS_ENUM, INS_CLASS, INS_SERVICE_TYPE,
+--   INS_EXECUTOR, INS_TARIFF, UPD_*, DEL_*
+-- Калькулятор: CALC_ORDER_COST, CALC_ORDER_ITEM_COST,
+--   FIND_OPTIMAL_EXECUTOR, FIND_OPTIMAL_TARIFF, VALIDATE_ORDER
+-- Утилиты: GET_ALL_EI, GET_ALL_ENUMS, GET_ALL_SERVICE_TYPES,
+--   GET_ALL_EXECUTORS, GET_ALL_TARIFFS, GET_ALL_ORDERS
 
 -- Проверка данных
 SELECT COUNT(*) FROM CHEM_CLASS;
@@ -225,30 +230,30 @@ SELECT COUNT(*) FROM FUNCT_R;
 
 ```bash
 export DB_HOST=localhost
-export DB_PORT=5432
+export DB_PORT=5433
 export DB_NAME=tariff_system
 export DB_USER=postgres
-export DB_PASSWORD=your_password
+export DB_PASSWORD=postgres
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
 $env:DB_HOST="localhost"
-$env:DB_PORT="5432"
+$env:DB_PORT="5433"
 $env:DB_NAME="tariff_system"
 $env:DB_USER="postgres"
-$env:DB_PASSWORD="your_password"
+$env:DB_PASSWORD="postgres"
 ```
 
 ### Windows (CMD)
 
 ```batch
 set DB_HOST=localhost
-set DB_PORT=5432
+set DB_PORT=5433
 set DB_NAME=tariff_system
 set DB_USER=postgres
-set DB_PASSWORD=your_password
+set DB_PASSWORD=postgres
 ```
 
 ## Запуск тестов
