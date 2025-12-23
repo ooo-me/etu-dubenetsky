@@ -90,7 +90,11 @@ public:
      * Расчет базовой стоимости услуги
      * @return Базовая стоимость
      */
-    virtual Double calculateBaseCost() const = 0;
+    virtual Double calculateBaseCost() const {
+        // Базовая реализация - возвращает 0.0
+        // Переопределяется в наследниках для конкретных расчетов
+        return 0.0;
+    }
 
 protected:
     Integer id_;                                              // Уникальный идентификатор
