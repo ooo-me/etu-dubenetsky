@@ -1,0 +1,1774 @@
+/**************************************************************/
+/**************************************************************/
+Приложение для задания 4.1, 01.10.2024
+/**************************************************************/
+/**************************************************************/
+
+create or alter procedure INS_VAL_ENUM (
+    PIDENUM integer,
+    PSHNAME varchar(15),
+    PNAME varchar(150),
+    PRVAL double precision,
+    PINTVAL integer,
+    PPICVAL varchar(50))
+returns (
+    ONEW integer,
+    ONUM integer,
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VIDCLASS integer;
+declare variable VYESSTR integer;
+declare variable VYESINT integer;
+declare variable VYESPIC integer;
+declare variable VYESR integer;
+declare variable VENSTR integer;
+declare variable VENR integer;
+declare variable VENINT integer;
+declare variable VENPIC integer;
+begin
+/*функция: Добавляет новое значение pIdEnum 
+  вход:pIdENum - ид. перечисления
+       pShName -  обозначение
+       pName -  имя
+       pRVal - веществ значение
+       pIntVal – целочисл. значение
+       pPicVal – ссылка на рисунок 
+  выход: oNum - порядковый номер значения в списке перечисления
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: */
+
+  oRes=1;
+  vEnStr = 106;
+  vEnR= 108;
+  vEnInt = 109; 
+  vEnPic= 105;
+  vYes=0;
+  vYesStr=0;
+  vYesPic=0;
+  vYesR=0;
+  vYesInt=0; 
+  oNum=0;
+  select OYES from IN_GR(:vEnPic,:pIdEnum)
+     into :vYesPic;
+  if ((:vYesStr >0) or (:vYesPic >0)) then
+    begin
+      select count(*) from POS_ENUM
+        where ID_ENUM=:pIdEnum and ((SHORT_NAME=:pShName or  
+          NAME=:pName)or (:pShName is null) or (:pName is null))
+        into :vYes;
+      if ((:pShName is null) or (:pName is null)) then vYes=1;
+    end
+  select OYES from IN_GR(:vEnR,:pIdEnum)
+     into :vYesR;
+  if((:vYesR >0) and (:pRVal is null)) then vYes=1;
+
+  select OYES from IN_GR(:vEnInt,:pIdEnum)
+     into :vYesInt;
+  if((:vYesInt >0) and (:pIntVal is null)) then vYes=1;
+
+  if (:vYes=0) then
+    begin
+      select MAX(NUM )from POS_ENUM
+        where ID_ENUM=:pIdEnum
+        into :oNum;
+      if(:oNum is null) then oNum=0;
+      oNum=oNum+1;
+      oRes=1;
+      select oNew from GEN_POS_ENUM
+        into :oNew;
+      insert into POS_ENUM(ID_ENUM,ID_POS,NUM,SHORT_NAME, 
+               NAME,RVAL,INT_VAL,PIC_VAL)
+        values(:pIdEnum,:oNew,:oNum,:pShName,:pName,
+                :pRVal,:pIntVal,:pPicVal); 
+    end
+  else
+    oRes=0;  
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure INS_ARG_FUN (
+    PIDFUN integer,
+    PIDCLASS integer,
+    PIDPAR integer)
+returns (
+    ONUM integer,
+    ORES integer)
+as
+declare variable VCLCONST integer;
+declare variable VCLPROD integer;
+declare variable VYESPARPROD integer;
+declare variable VYESCL integer;
+declare variable VYESPROD integer;
+begin
+/*функция: Добавляет новый аргумент для предиката  или ар. функции
+  вход:
+    pIdFun – ид. функции,
+    pIdPar – параметр продукта,
+    pIdClass – класс аргумента
+выход: oNum – номер аргумента в списке
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений параметров по oRes=0 */
+
+  oRes= 0;
+  vYesProd = 0;
+  vYesCl =  0;
+  vClConst = 129;
+  vClProd = 1;
+  select count(*) from CHEM_CLASS
+    where ID_CLASS = :pIdClass
+    into :vYesCl;
+  if (:vYesCl > 0) then
+    begin
+      select OYES from IN_GR1(:vClProd,:pIdClass)
+                into :vYesProd;
+      select count(*) from PAR_CLASS1 
+        where PAR = :pIdPar and CLASS = :pIdClass
+        into : vYesParProd;
+      if ((:vYesProd > 0) and (:vYesParProd > 0) or (:vYesProd =0)) then
+        begin
+          oNum=0;
+          select MAX(NUM) from ARG_FUN 
+            where ID_FUN = :pIdFun
+            into :oNum;
+          if(:oNum is null) then oNum=0;
+          oNum = oNum +1;
+          insert into ARG_FUN(ID_FUN,NUM,ID_CLASS, ID_PARAM)
+            values(:pIdFun,:oNum,:pIdClass, :pIdPar); 
+          oRes = 1;
+        end
+      else oRes =0;
+    end
+  else oRes =0;
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure COPY_PAR_PROD1 (
+    PIDPROD integer)
+returns (
+    ORES integer)
+as
+declare variable VPAR integer;
+declare variable VIDCLASS integer;
+declare variable VYES integer;
+declare variable VFLAG integer;
+declare variable VIDPARPROD integer;
+begin
+/*функция: Формирует список для значений параметров экземпляра pIdProd на основе параметров его класса
+  вход:pIdProd - ид. продукта
+  выход:oRes - 0 - ошибка 1 - список сформирован
+  эффекты: */
+  oRes=0;
+  vYes=1;
+  vPar=0;
+  select ID_CL from PROD
+    where ID_PROD=:pIdProd
+    into :vIdClass; 
+  for select p1.PAR, p1.FLAG_CONF  from PAR_CLASS1 p1
+        where p1.CLASS=:vIdClass
+        into :vPar, :vFlag
+  do
+  begin
+    select count(*) from PAR_PROD2
+      where ID_PROD=:pIdProd and ID_PAR=:vPar
+      into :vYes;
+    if (:vYes=0) then
+      begin
+        select oNew from GEN_ID_PAR_PROD
+           into :vIdParProd; 
+        insert into PAR_PROD2(ID_PAR_PROD,ID_PROD,ID_PAR, FLAG_CONF)
+              values ( :vIdParProd,:pIdProd,:vPar, :vFlag);
+        oRes=1;
+      end
+     else
+        oRes=0;
+    suspend;
+  end
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_PREDICAT2 (
+    PIDPRED integer,
+    PIDSTATE integer,
+    PIDDEC integer,
+    PYESPAR integer)
+returns (
+    ORES integer)
+as
+declare variable VYESPAR integer;
+declare variable VYESPER integer;
+declare variable VYESGR integer;
+begin
+/*функция: Вычисление предиката
+вход: pIdPred -  ид.предиката
+      pIdState - ид. текущего состояния;
+      pIdDec- ид. текущего решения
+      pIdPar - ид. текущего параметрра
+      
+выход:
+      
+      oRes - результат завершения 0 - false, 1 - true
+*/
+  oRes=0;
+  select count(*) from PREDICAT2
+    where ID_PRED =:pIdPred and ID_STATE=:pIdState and ID_DEC=:pIdDec and 
+                   YES_PAR=:pYesPar
+    into :oRes;
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_AR_FUN (
+    PIDFACTFUN integer)
+returns (
+    OVALFUN double precision,
+    OVALARG1 double precision,
+    OVALARG2 double precision,
+    OSHNAME varchar(15),
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VARGF integer;
+declare variable VARGPARPROD integer;
+declare variable VARGCONST integer;
+declare variable VARGPOSENUM integer;
+declare variable VOPER integer;
+declare variable VOPSUM integer;
+declare variable VOPMIN integer;
+declare variable VOPDIV integer;
+declare variable VOPMULT integer;
+declare variable VINT integer;
+declare variable VR integer;
+declare variable VCLCONST integer;
+declare variable VENUM integer;
+declare variable VYESENUM integer;
+declare variable VPAR integer;
+declare variable VCLFUN integer;
+declare variable VARFUN integer;
+declare variable VCONST integer;
+declare variable VNUM integer;
+declare variable VFACTFUNARG integer;
+declare variable VCLARGFUN integer;
+declare variable VCLARFUN integer;
+declare variable VFACTPROD integer;
+declare variable VFACTCONST integer;
+declare variable VFACTENUM integer;
+declare variable VFACTFUN integer;
+declare variable VIDPAR integer;
+declare variable VCLARG integer;
+declare variable VPROD integer;
+declare variable VCLPROD integer;
+declare variable VYESPROD integer;
+declare variable VTYPEP integer;
+declare variable VIDFUN integer;
+declare variable VIDVAR integer;
+declare variable VVALARG double precision;
+declare variable VVALARG1 double precision;
+declare variable VVALARG2 double precision;
+begin
+/*функция: Вычисляет значение предиката  для варианта вызова
+               pIdFactFun
+  вход:
+    pIdFactFun – ид. вызова предиката,
+выход: oValFun – результат 0 – false, 1 – true, null -ошибка
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений параметров  oRes=0 
+******************************************************************/
+  vInt= 111;
+  vR = 112;
+  vNum=0;
+  vArFun=123;
+  vConst=129;
+  vOper=0;
+  vEnum = 103;
+  vClProd = 1;
+  vClArFun = 123;
+  vOpSum = 24;
+  vOpMin = 25;
+  vOpMult =26;
+  vOpDiv =27;
+  oRes=1;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT = :pIdFactFun
+    into :vIdFun, :vIdVar;
+  select OPER, SH_NAME, CLASS_F from FUN_COMP
+    where ID_FUN=:vIdFun
+    into :vOper,:oShName, :vClFun; 
+  /*находим значения параметров*/
+  for select FACT_PROD,FACT_CONST,FACT_ENUM,
+                              FACT_FUN1,NUM from FACT_PAR
+        where ID_FUN_FACT = :pIdFactFun 
+        into :vFactProd,:vFactConst, :vFactEnum, :vFactFun,:vNum
+  do
+    begin 
+  /*прочитать значение аргумента*/
+      select ID_CLASS, ID_PARAM from ARG_FUN
+        where ID_FUN = :vIdFun and NUM = :vNum
+        into :vClArg, :vIdPar;
+      if (:vClArg = :vArFun) then /*вычислять значение ар. функции*/
+        begin
+      /*найти вариант подстановки*/
+          select FACT_FUN1 from FACT_PAR
+            where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+            into :vFactFunArg; 
+          select oValFun, :oRes from CALC_AR_FUN(:vFactFunArg)
+            into :vValArg, :oRes;
+        end
+      else
+        if (:vClArg = :vConst)then
+          begin
+            select VAL_R from CONST
+              where ID_CONST=:vFactConst
+              into :vValArg;
+          end  
+        else
+          begin
+            select OYES from IN_GR1(:vClProd,:vClArg)
+              into :vYesProd;
+            if (:vYesProd > 0) then
+              begin
+                select TYPE_P from PARAMETR1
+                  where ID_PAR = :vIdPar
+                  into :vTypeP;
+                if (:vTypeP = :vR) then  /*для вещ. значения 
+                                                 параметра*/
+                  select VAL_R from PAR_PROD2
+                    where ID_PROD =:vFactProd and ID_PAR = :vIdPar
+                    into :vValArg;
+                 else
+                   begin  /*для параметра-перечисления*/
+                     select OYES from IN_GR1(:vEnum,:vTypeP)
+                       into :vYesEnum;
+                     if (:vYesEnum > 0) then 
+                       select VAL_ENUM from PAR_PROD2
+                         where ID_PAR=:vPar and ID_PROD = :vFactProd
+                         into :vValArg; /*только ид. значения*/
+                   end
+              end
+          end 
+      if(:vNum =1) then 
+        begin
+         oValArg1=vValArg;
+         oValFun = vValArg;
+        end
+      else
+        begin
+          oValArg2 = vValArg;  
+          if (:vValArg is not null) then
+            begin
+              if (:vOper  = :vOpSum) then oValFun = oValFun + vValArg;
+              else
+                if (:vOper  = :vOpMin) then oValFun = oValFun -
+                                                vValArg;
+                else
+                  if (:vOper  = :vOpMult) then oValFun = 
+                                  oValFun * vValArg;
+                  else
+                    if (:vOper  = :vOpDiv) then  
+                          oValFun = oValFun/vValArg;
+                    else 
+                      begin
+                        oRes=0;
+                        oValFun = null;
+                      end
+            end
+          else
+            begin
+              oRes=0;
+              oValFun = null;
+            end
+        end
+    end /*конец цикла*/
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_LOG_FUN (
+    PIDFACTFUN integer)
+returns (
+    OSHNAME varchar(15),
+    OVALFUN integer,
+    OVALARG1 integer,
+    OVALARG2 integer,
+    ORES integer)
+as
+declare variable VARGF integer;
+declare variable VOPER integer;
+declare variable VOPOR integer;
+declare variable VOPAND integer;
+declare variable VOPNOT integer;
+declare variable VCLFUN integer;
+declare variable VNUM integer;
+declare variable VFACTFUNARG integer;
+declare variable VCLARGFUN integer;
+declare variable VFACTFUN integer;
+declare variable VLOGFUN integer;
+declare variable VCLARG integer;
+declare variable VPRED integer;
+declare variable VIDFUN integer;
+declare variable VIDVAR integer;
+declare variable VVALARG integer;
+begin
+/*функция: Вычисляет значение логической функции для варианта вызова pIdFactFun
+  вход:
+    pIdFactFun – ид. вызова лог. функции
+выход: oValFun – результат 0 – false, 1 – true, null -ошибка
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений входных параметров  oRes=0 
+******************************************************************/
+  vNum=0;
+  vOper=0;
+  vOpOR = 28;
+  vOpAND = 29;
+  vOpNOT = 30;
+  vPred = 124;
+  vLogFun = 127;
+  oRes=1;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT = :pIdFactFun
+    into :vIdFun, :vIdVar;
+  select OPER, SH_NAME, CLASS_F from FUN_COMP
+    where ID_FUN=:vIdFun
+    into :vOper,:oShName, :vClFun; 
+  /*находим значения параметров*/
+  for select FACT_FUN1,NUM from FACT_PAR
+        where ID_FUN_FACT = :pIdFactFun 
+        into  :vFactFun,:vNum
+  do
+    begin 
+  /*прочитать значение аргумента*/
+      select ID_CLASS from ARG_FUN
+        where ID_FUN = :vIdFun and NUM = :vNum
+        into :vClArg;
+      if (:vClArg = :vPred) then /*вычислять значение предиката*/
+        begin
+      /*найти вариант подстановки*/
+          select FACT_FUN1 from FACT_PAR
+            where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+            into :vFactFunArg; 
+          select oValFun, :oRes from CALC_PRED(:vFactFunArg)
+            into :vValArg, :oRes;
+        end
+      else
+        if (:vClArg = :vLogFun)then
+          begin
+      /*найти вариант подстановки*/
+            select FACT_FUN1 from FACT_PAR
+              where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+              into :vFactFunArg; 
+            select oValFun, oRes from CALC_LOG_FUN(:vFactFunArg)
+            into :vValArg, :oRes;
+          end
+      if(:vNum =1) then 
+        begin
+          oValFun = vValArg;
+          oValArg1 = vValArg;
+        end
+      else
+        begin
+          if (:vValArg is not null) then
+            begin
+              oValArg2 = vValArg;
+              if ((:vOper  = :vOpOR) and (:vValArg = 1)) then 
+                oValFun = 1;
+              else
+                if ((:vOper  = :vOpAND) and (:vValArg = 0))  then 
+                    oValFun = 0;
+                else
+                  if (:vOper  = :vOpNOT) then 
+                    if (:vValArg = 0) then oValFun = 1;
+                    else oValFun = 0;
+            end
+          else
+            begin
+              oRes = 0;
+              oValFun = null;
+            end
+        end
+    end /*конец цикла по аргументам*/
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure INS_FUNCT (
+    PSHORTNAME varchar(50),
+    PNAME varchar(250),
+    PTYPEF integer,
+    PTYPERES integer,
+    PVARMN integer,
+    PEIR integer,
+    PCLOB integer,
+    PIFRULE integer,
+    PVARREAL integer,
+    PINVR integer)
+returns (
+    OIDF integer,
+    OYESNAME integer,
+    OYESTYPEF integer,
+    OYESTYPERES integer,
+    OYESEI integer,
+    OYESIF integer,
+    OYESCLOB integer,
+    ORES integer)
+as
+declare variable VIFRES integer;
+begin
+/*функция: Создает новую функцию правила
+вход: pShortName - обозначение функции,
+   pNAME - имя функции,
+   pTypeF - тип функции из CHEM_CLASS,
+   pTypeRes - тип результата,
+   pVarMN - вариант множественности роли,
+   pEIR - ЕИ значия для численной фукции
+   pClOb - класс объекта-владельца (только для ролей и правил),
+   pIfRull - логическое выражение (только для правил),
+   pVarReal - вариант реализации (только для ролей),
+   pInvR - ссылка на основную роль (только для инверсных ролей
+
+выход: oIdА - id роли,
+       oRes - 0 - ошибка, 1 - успешное выполнение,
+эффекты:
+  1. Проверяется уникальность имени и обозначения функции
+  2. Проверяется корректность указания типа функции
+  3. Проверяется наличие класса аргумента и результата
+требования:
+1. Для функций с результатом численного типа необходимо указать ЕИ 
+*/
+  oRes=1;
+  oYesName=0;
+  oYesTypeF=0;
+  oYesTypeRes=0;
+  oYesEI=1;
+  oYesIf=0;
+  oYesClOb=0;
+  vIfRes=0;
+  select count(*) from FUNCT_R
+        where  (SHORT_NAME=:pShortName or NAME=:pName)
+        into :oYesName;
+/*139 - метакласс Функция*/
+  select oYes from IN_GR(139,:pTypeF)
+    into :oYesTypeF;
+/*102 - Компонент*/
+  select oYes from IN_GR(102,:pTypeRes)
+    into :oYesTypeRes;
+  if(:pIfRule is null) then oYesIf=1;
+  else
+    begin
+      select TYPE_RES from FUNCT_R
+        where ID_F =:pIfRule 
+        into :vIfRes;
+      if (:vIfRes=153) then oYesIf=1; /* 153 - boolean*/
+    end 
+  if(:pClOb is null) then oYesClOb=1;
+  else
+    select oYes from IN_GR(32,:pClOb)   /*32 - класс ПО*/
+      into :oYesClOb;
+  if (:pEIR is null) then oYesEI=1;
+  else
+   select count(*) from EI
+     where ID_EI=:pEiR
+    into :oYesEI;
+  
+  if ((:oYesName=1)or (:oYesTypeF=0)or (:oYesTypeRes=0)or
+      (:oYesEI=0)or (:oYesIf=0)or(:oYesClOb=0)) then oRes=0;
+  else
+    begin
+      select oNew from GEN_ID_FUNCT_R
+            into :oIdF;
+      insert into FUNCT_R(ID_F,SHORT_NAME,NAME,TYPE_F, 
+                  TYPE_RES,VAR_MN,EI_R,IF_RULE,CL_OB,VAR_REAL,INV_R)
+        values(:oIdF,:pShortName,:pName, :pTypeF,:pTypeRes,:pVarMN,
+                             :pEiR,:pIfRule,:pClOb,:pVarReal,:pInvR); 
+    end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure COPY_FUNCT_PROD (
+    PIDPROD integer)
+returns (
+    ORES integer)
+as
+declare variable VPAR integer;
+declare variable VIDCLASS integer;
+declare variable VYES integer;
+declare variable VYESROLE integer;
+declare variable VYESCLOB integer;
+declare variable VYESVALROLE integer;
+declare variable VTYPEF integer;
+begin
+/*функция: Формирует список для значений функций экземпляра pIdProd
+  вход:pIdProd - ид. продукта
+  выход:oRes - 0 - ошибка 1 - список сформирован
+  эффекты: */
+
+  oRes= 0;
+  vYesRole=0;
+  vYesValRole=0;
+  vTypeF=0;
+  vYesClOb=0;
+  select ID_CL from PROD
+    where ID_PROD=:pIdProd
+    into :vIdClass; 
+  select count(*) from FUNCT_R
+      where CL_OB=:vIdClass 
+      into :vYesClOb;
+  if(:vYesClOb>0) then
+    begin
+      oRes=1;
+      for select p1.ID_F,p1.TYPE_F from FUNCT_R p1
+            where p1.CL_OB=:vIdClass
+            into :vPar,:vTypeF 
+      do
+      begin
+        select count(*) from ROLE_VAL
+          where ((ID_ROLE=:vPar) and (ID_OB=:pIdProd))
+          into :vYesValRole; 
+        if(:vYesValRole = 0) then
+          insert into ROLE_VAL(ID_OB,ID_ROLE,NUM,VAL_CH, VAL_INT,VAL_REAL,
+                         VAL_DATE,ID_OB_RES,ID_CL_RES,ID_ENUM_RES,VAL_BOOL)
+               values ( :pIdProd,:vPar,1,null, null,null,null,null,null,null,null);
+      end  
+    end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure INS_OB (
+    PIDCLASS integer,
+    PSHNAME varchar(50),
+    PNAME varchar(200),
+    PCONF integer)
+returns (
+    OIDPROD integer,
+    ORES integer)
+as
+declare variable VYESCLASS integer;
+declare variable VYESTERM integer;
+begin
+/*функция: Создает новый экземпляр продукции
+  вход:pIdClass - ид. продукта
+       pShName - обозначение продукта
+       pName - имя продукта
+       pConf - флаг шаблона конфигуратора (0- обычный объукт, 1 - шаблон)
+  выход: oIdProd - ид. нового продукта
+         oRes - 0 - ошибка 1 - список сформирован
+  эффекты: */
+  oRes=0;
+  select count(*) from CHEM_CLASS
+    where ID_CLASS=:pIdClass
+    into :vYesClass;
+  if(:vYesClass =1) then
+    begin
+      select count(*) from CHEM_CLASS
+        where MAIN_CLASS=:pIdClass
+        into :vYesTerm;
+      if(:vYesTerm=0) then
+        begin
+          oRes=1;
+          select oNew from GEN_ID_PROD
+            into :oIdProd;
+          insert into PROD(ID_PROD,SHORT_NAME,NAME,ID_CL,CONF)
+            values(:oIdProd,:pShName,:pName,:pIdClass,:pConf); 
+          select oRes from COPY_FUNCT_PROD(:oIdProd)
+            into :oRes; 
+        end
+    end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure UPDATE_VAL_ROLE (
+    PIDROLE integer,
+    PIDOB integer,
+    PVALCH varchar(50),
+    PVALINT integer,
+    PVALREAL double precision,
+    PVALDATE date,
+    PIDOBRES integer,
+    PIDCLRES integer,
+    PIDENUMRES integer,
+    PVALBOOL integer)
+returns (
+    ORES integer)
+as
+declare variable VYESROLE integer;
+declare variable VYESOB integer;
+declare variable VYESOBRES integer;
+declare variable VYESREC integer;
+declare variable VYESENUMRES integer;
+declare variable VYESCLRES integer;
+declare variable VTYPEROLE integer;
+declare variable VTYPERES integer;
+declare variable VTYPEF integer;
+declare variable VVARMN integer;
+begin
+/* функция: Записывает значение роли pIdRole для объекта pIdOb;
+   вход:pIdRole - id роли,
+        pIdOb - id объекта из PROD,
+        pValCh - значение роли varchar(50),
+        pValInt - значение роли int, 
+        pValReal - значение роли real, 
+        pIdObRes - ссылка на объект-результат или на значение перечисления
+        
+   выход: oRes - 0 - ошибка, > 0 - успешное выполнение операции
+   эффекты:
+   требования:
+*/
+  vYesRole=0;
+  vYesOb=0;
+  vYesRec=0;
+  vYesObRes=0;
+  vYesClRes=0;
+  vYesEnumRes=0;
+  oRes=0;
+  select count(*) from ROLE_VAL
+    where ID_ROLE=:pIdRole and ID_OB=:pIdOb
+    into :vYesRec;
+  if(:vYesRec>0) then
+    begin
+      select TYPE_F, TYPE_RES, VAR_MN from FUNCT_R
+        where ID_F=:pIdRole
+        into :vTypeF, :vTypeRes,:vVarMN;
+      if (:vTypeF <> 109) then
+        begin
+          if (:vTypeRes= 117) then /*117 - int*/
+            begin 
+              oRes=1;
+              update ROLE_VAL
+                 set VAL_INT=:pValInt
+                 where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+            end
+          else 
+            if (:vTypeRes= 116) then /* 116 - char*/
+              begin
+                oRes=1;
+                update ROLE_VAL
+                  set VAL_CH=:pValCh
+                  where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+              end
+            else
+              if (:vTypeRes= 118) then /* 118 - real*/
+                begin
+                  oRes=1;
+                  update ROLE_VAL
+                    set VAL_REAL=:pValReal
+                    where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+                end
+              else
+                if (:vTypeRes= 115) then /* 115 - date*/
+                  begin
+                    oRes=1;
+                    update ROLE_VAL
+                      set VAL_DATE=:pValDate
+                      where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+                  end
+                else
+                  if (:vTypeRes= 153) then /* 153 - bool*/
+                    begin
+                      oRes=1;
+                      update ROLE_VAL
+                        set VAL_BOOL=:pValBool
+                        where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+                    end
+                  else  
+                  begin 
+                    select count(*) from PROD
+                      where ID_PROD=:pIdObRes
+                      into :vYesObRes;
+                      if (:vYesObRes > 0) then
+                        begin 
+                          oRes=1;
+                          update ROLE_VAL
+                            set ID_OB_RES=:pIdObRes
+                            where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+                        end
+                      else    
+                        begin 
+                          select count(*) from ENUM_VAL_R
+                            where ID_VAL=:pIdEnumRes
+                            into :vYesEnumRes;
+                          if (:vYesEnumRes > 0) then
+                            begin 
+                              oRes=1;
+                              update ROLE_VAL
+                                set ID_ENUM_RES=:pIdEnumRes
+                                where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+                            end
+                        end
+                  end
+        end
+      else
+        if (:vTypeF= 109) then 
+          begin
+            select count(*) from CHEM_CLASS
+              where ID_CLASS=:pIdClRes
+              into :vYesClRes;
+            if (:vYesClRes > 0) then  
+              begin 
+                oRes=1;
+                update ROLE_VAL
+                  set ID_CL_RES=:pIdClRes
+                  where ID_OB=:pIdOb and ID_ROLE=:pIdRole;
+              end
+          end
+    end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure FIND_VAL_PAR (
+    PIDOB integer,
+    PIDROLE integer)
+returns (
+    ONAMEROLE varchar(50),
+    OVALCH varchar(50),
+    OVALINT integer,
+    OVALREAL double precision,
+    OVALDATE date,
+    OENUMRES integer,
+    OOBRES integer,
+    OCLRES integer,
+    OEI integer,
+    OSHNAMEEI varchar(10),
+    ONAMERES varchar(50),
+    ONAMECLRES varchar(50),
+    OVALBOOL integer,
+    ORES integer)
+as
+declare variable VVALREAL double precision;
+declare variable VVALINT integer;
+declare variable VVALCH varchar(50);
+declare variable VVALDATE date;
+declare variable VENUMRES integer;
+declare variable VOBRES integer;
+declare variable VCLRES integer;
+declare variable VRABROLE integer;
+declare variable VENUM integer;
+declare variable VCLCLRES integer;
+declare variable VTYPEROLE integer;
+declare variable VTYPERES integer;
+declare variable VVARMN integer;
+declare variable VINVROLE integer;
+declare variable VEIR integer;
+begin
+/*функция: Читает значение параметра pIdRole объекта pIdOb
+  вход:
+    pIdOb - id объекта
+  выход:
+    oNameRole - имя роли,
+    oValInt - значение int,
+    oValReal - значение real,
+    oValDate - значение TIMESTAMP,
+    oEnumRes - значение enum,
+    oObRes - значение объект,
+    oClRes - значение класс,
+    oEI - ид. ЕИ параметра,
+    oShNameEI - обозначение ЕИ,
+    oNameRes - имя результата,
+    oNameClRes - имяя класса результата,
+    oRes - 0 - ошибка, 1 - операция выполнена
+  эффекты:
+  требования:
+*/
+  oRes=0;
+  oValCh= null;
+  oValInt= null;
+  oValReal = null;
+  oValDate = null;
+  oEnumRes = null;
+  oObRes = null;
+  oClRes = null;
+  oShNameEI= null;
+  oNameRes= null;
+  oNameClRes = null; 
+  vRabRole=0;
+  vEnum= null;
+  select NAME,TYPE_F, TYPE_RES, INV_R, EI_R from FUNCT_R
+    where ID_F=:pIdRole
+    into :oNameRole,:vTypeRole,:vTypeRes,:vInvRole, :vEIR;
+  if(:vInvRole > 0)then
+    vRabRole=vInvRole;
+  else       /*роль прямая*/
+    vRabRole=pIdRole;
+  select VAL_CH,VAL_INT,VAL_REAL,VAL_DATE,ID_ENUM_RES,
+                   ID_OB_RES,ID_CL_RES,VAL_BOOL from ROLE_VAL
+    where ID_OB =:pIdOb and ID_ROLE=:vRabRole
+    into :oValCh,:oValInt,:oValReal,:oValDate,:oEnumRes,:oObRes,:oClRes,:oValBool;
+  if(:oValCh  is not null) then 
+    oRes = 1;
+  else 
+    if((:oValInt is not null) or (:oValReal is not null))then 
+      begin
+        select EI_R from FUNCT_R
+          where ID_F=:vRabRole
+          into :oEI;
+        select SHORT_NAME from EI
+          where ID_EI= :oEI
+          into :oShNameEI;
+        oRes=1;
+      end
+    else
+      if(:oEnumRes is not null) then 
+        begin
+          select NAME, ID_ENUM from ENUM_VAL_R
+            where ID_VAL= :oEnumRes
+            into :oNameRes,:vEnum;
+          select NAME from ENUM
+            where ID_ENUM=:vEnum
+            into :oNameClRes; 
+          oRes=1;
+        end
+      else  
+        if(oObRes is not null) then 
+          begin
+            select NAME, ID_CL from PROD
+              where ID_PROD=:oObRes
+              into :oNameRes, :oClRes;
+            select NAME from CHEM_CLASS
+              where ID_CLASS= :oClRes
+              into :oNameClRes;
+            oRes=1;
+          end
+        else
+         if(oClRes is not null) then 
+          begin
+            select NAME,MAIN_CLASS from CHEM_CLASS
+              where ID_CLASS= :oClRes
+              into :oNameRes,:vClClRes;
+            select NAME from CHEM_CLASS
+              where ID_CLASS= :vClClRes
+              into :oNameClRes;
+            oRes=1;
+          end  
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure FIND_VAL_ALL_PAR (
+    PIDOB integer)
+returns (
+    ONAMEROLE varchar(50),
+    OVALINT integer,
+    OVALREAL double precision,
+    OVALDATE date,
+    OENUMRES integer,
+    OOBRES integer,
+    OCLRES integer,
+    OEI integer,
+    OSHNAMEEI varchar(10),
+    ONAMERES varchar(50),
+    ONAMECLRES varchar(50),
+    OVALBOOL integer,
+    ORES integer)
+as
+declare variable VIDROLE integer;
+begin
+/*вход:
+    pIdOb - id объекта
+  выход:
+    oNameRole - имя роли,
+    oValInt - значение int,
+    oValReal - значение real,
+    oValDate - значение TIMESTAMP,
+    oEnumRes - значение enum,
+    oObRes - значение объект,
+    oClRes - значение класс,
+    oEI - ид. ЕИ параметра,
+    oShNameEI - обозначение ЕИ,
+    oNameRes - имя результата,
+    oNameClRes - имяя класса результата,
+    oRes - 0 - ошибка, 1 - операция выполнена
+  эффекты:
+  требования:
+*/
+  for select ID_ROLE from ROLE_VAL
+        where ID_OB=:pIdOb
+        into :vIdRole      do
+    begin
+      select oNameRole, oValInt, oValReal, oValDate, oEnumRes,oObRes,oClRes,
+            oEI, oShNameEI,oNameRes,oNameClRes,oValBool,oRes
+        from FIND_VAL_PAR(:pIdOb,:vIdRole)
+        into :oNameRole, :oValInt, :oValReal, :oValDate, :oEnumRes,:oObRes,:oClRes,
+            :oEI, :oShNameEI,:oNameRes,:oNameClRes,oValBool,:oRes;
+      suspend;
+    end
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure INS_DEC_F (
+    PIDF integer,
+    PIDDEC integer)
+returns (
+    OYESF integer,
+    OYESDEC integer,
+    ONUM integer,
+    ORES integer)
+as
+begin
+/*функция: добавляет решение в правило
+  вход: pIdF - id функции,
+        pDec - решение из FUNCT_RULE,
+  выход: oYesF - есть правило, 
+         oYesDec - есть решение,
+         oN - локальный номер решения
+         oRes - 0 - ошибка, 1 - ок
+  требование: 1. Ограничение - типы решений только из FUNCT_RULE
+*/
+  oRes=1;
+  oYesF=0;
+  oYesDec=0;
+  oNum=0;
+  select count(*) from FUNCT_R
+    where  ((ID_F=:pIdF) and (TYPE_F=140))
+    into :oYesF;
+  select count(*) from FUNCT_R
+    where  (ID_F=:pIdDec)
+    into :oYesDec;
+  if ((:oYesF=0)or (:oYesDec=0)) then oRes=0;
+  else
+    begin
+      select MAX(NUM) from DECISION_RULE
+        where ID_RULE= :pIdF
+        into :oNum;
+      oNum=oNum+1;
+      insert into DECISION_RULE(ID_RULE,NUM, THEN_RULE)
+        values(:pIdF,:oNum, :pIdDec); 
+    end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CASE_ARG (
+    PROLE integer,
+    POB1 integer,
+    POB2 integer)
+returns (
+    OARG integer,
+    OVALBOOL integer,
+    ORES integer)
+as
+declare variable VYESARG integer;
+declare variable VARG integer;
+declare variable VYESRULE integer;
+declare variable VRULE integer;
+declare variable VVALBOOL integer;
+begin
+/*функция: возвращает выбранный аргумент и его значение;
+  вход: pRole - ид. роли,
+           pOb - ид. объекта для роли
+   выход: oArg - выбранный аргумент,
+              oRes - 0 -ошибка, 1 - ok.
+   эффекты: Пока только для ролей вещественного типа
+   требование:     
+*/
+  vValBool=0;
+  vYesArg=0;
+  vArg = null;
+  vYesRule=0;
+  oRes = 0;
+  select  count(*) from ARG_FUNCT
+    where ID_F=:pRole
+    into :vYesArg;
+    oArg = null;
+    vArg = null; 
+  if (:vYesArg >0) then 
+    for select ARG from ARG_FUNCT
+          where ID_F = :pRole
+          into :vArg     do
+      begin
+        oRes = 1; 
+        select count(*) from DECISION_RULE
+          where THEN_RULE = :vArg
+          into :vYesRule;
+        if (:vYesRule >0) then
+          begin
+           for select ID_RULE from DECISION_RULE
+                   where THEN_RULE = :vArg
+                   into :vRule      do
+             begin
+                select oValBool, oRes from CALC_RULE(:pOb1,:vRule,:pOb2)
+                  into :vValBool, :oRes;
+                if (:vValBool=1) then 
+                  begin
+                    oValBool=1;
+                    oArg=vArg;
+                  end
+             end
+          end
+      end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_RULE (
+    PIDOB1 integer,
+    PIDF integer,
+    PIDOB2 integer)
+returns (
+    OVALBOOL integer,
+    ORES integer)
+as
+declare variable VTYPEF integer;
+declare variable VTYPERES integer;
+declare variable VIFRULE integer;
+declare variable VYESRULE integer;
+declare variable VRULE integer;
+declare variable VVALBOOL integer;
+begin
+  select count(*) from DECISION_RULE
+    where THEN_RULE = :pIdF
+    into :vYesRule;
+  if (:vYesRule >0) then
+    begin
+      oValBool=0;
+      for select ID_RULE from DECISION_RULE 
+            where THEN_RULE = :pIdF
+            into :vRule             do
+        begin
+          select oValBool, oRes  from CALC_RULE(:pIdOb1,:vRule,:pIdOb2)
+            into :vValBool, :oRes;
+          if (:vValBool=1) then
+            begin
+              oValBool=1;
+              select IF_RULE from FUNCT_R
+                where ID_F=:pIdF
+                into :vIfRule;
+              select oValBool, oRes from CALC_LOG(:vIfRule,:pIdOb1,:pIdOb2)
+                into :oValBool, :oRes;
+            end
+        end
+    end
+  else
+    begin
+      select IF_RULE from FUNCT_R
+        where ID_F=:pIdF
+        into :vIfRule;
+      select oValBool, oRes from CALC_LOG(:vIfRule,:pIdOb1,:pIdOb2)
+        into :oValBool, :oRes;
+    end
+  suspend; 
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_PRED (
+    PIDPRED integer,
+    PIDOB1 integer,
+    PIDOB2 integer)
+returns (
+    OYESOB1 integer,
+    OYESPRED integer,
+    OYESOB2 integer,
+    OVALBOOL integer,
+    ORES integer)
+as
+declare variable VTYPEF integer;
+declare variable VTYPERES integer;
+declare variable VIFRULE integer;
+declare variable VVALCH1 varchar(50);
+declare variable VVALINT1 integer;
+declare variable VVALREAL1 double precision;
+declare variable VVALDATE1 date;
+declare variable VENUMRES1 integer;
+declare variable VOBRES1 integer;
+declare variable VCLRES1 integer;
+declare variable VEI1 integer;
+declare variable VVALBOOL1 integer;
+declare variable VVALCH2 varchar(50);
+declare variable VVALINT2 integer;
+declare variable VVALREAL2 double precision;
+declare variable VVALDATE2 date;
+declare variable VENUMRES2 integer;
+declare variable VOBRES2 integer;
+declare variable VCLRES2 integer;
+declare variable VEI2 integer;
+declare variable VVALBOOL2 integer;
+declare variable VTYPEF1 integer;
+declare variable VTYPERES1 integer;
+declare variable VTYPEF2 integer;
+declare variable VTYPERES2 integer;
+declare variable VRES1 integer;
+declare variable VRES2 integer;
+declare variable VARG1 integer;
+declare variable VARG2 integer;
+begin
+
+/*функция: Вычисляет значение предиката pIdF объекта pIdOb на основе правил из pIdObRule;
+  вход: pIdOb1 - ид. объекта 1,
+        pIdOb2 - ид. объекта 2,
+        pIdPred - предикат вычисляемый параметр,
+  выход: oYesOb - есть объект,
+         oYesF  - есть параметр,
+         oYesObRule - есть владелец правил,
+         oNum - номер значения,
+         oVal - значение,
+         oRes - 0 - ошибка, 1 - ок
+  требование: 1. Ограничение - значение  только для типа real (double precision
+*/
+  vValCh1 = null;
+  vValInt1= null;
+  vValReal1= null;
+  vValDate1= null;
+  vEnumRes1= null;
+  vObRes1= null;
+  vClRes1= null;
+  vValBool1=null;
+  vTypeF1=null;
+  vTypeRes1= null;
+ 
+  vValCh2 = null;
+  vValInt2= null;
+  vValReal2= null;
+  vValDate2= null;
+  vEnumRes2= null;
+  vObRes2= null;
+  vClRes2= null;
+  vValBool2=null;
+
+  vTypeF2=null;
+  vTypeRes2= null;
+
+  vTypeF=null;
+  vTypeRes= null;
+
+  vEI1= null;
+  vEI2= null;
+  oRes=0; 
+  vRes1=0;
+  vRES2=0;
+  select count(*) from PROD
+    where ID_PROD=:pIdOb1
+    into :oYesOb1;
+  select count(*) from PROD
+    where ID_PROD=:pIdOb2
+    into :oYesOb2;
+  select count(*) from FUNCT_R
+    where ID_F=:pIdPred
+    into :oYesPred;
+  if ((:oYesOb1=0) or (:oYesOb2=0) or (:oYesPred=0)) then oRes=0;
+  else
+    begin
+      select TYPE_F,TYPE_RES from FUNCT_R
+        where ID_F=:pIdPred
+        into :vTypeF,:vTypeRes;
+/*читаем аргументы */
+      select ARG  from ARG_FUNCT
+        where ID_F=:pIdPred and NUM_ARG=1
+        into :vArg1;
+      select TYPE_F,TYPE_RES,EI_R from FUNCT_R
+        where ID_F=:vArg1
+        into :vTypeF1,:vTypeRes1,:vEI1;
+      select  oValCh,oValInt, oValReal,oValDate,oEnumRes,oObRes,oClRes,
+            oEI,oValBool, oRes   from FIND_VAL_PAR(:pIdOb1, :vArg1)
+        into :vValCh1,:vValInt1, :vValReal1,vValDate1,:vEnumRes1,:vObRes1,:vClRes1,
+            :vEI1,:vValBool1,:vRes1; 
+      select ARG  from ARG_FUNCT
+        where ID_F=:pIdPred and NUM_ARG=2
+        into :vArg2;
+      select TYPE_F,TYPE_RES,EI_R from FUNCT_R
+        where ID_F=:vArg2
+        into :vTypeF2,:vTypeRes2,:vEI2;
+      select  oValCh,oValInt, oValReal,oValDate,oEnumRes,oObRes,oClRes,
+            oEI, oValBool,oRes   from FIND_VAL_PAR(:pIdOb2, :vArg2)
+        into :vValCh2,:vValInt2, :vValReal2,:vValDate2,:vEnumRes2,:vObRes2,:vClRes2,
+            :vEI2,:vValBool2,:vRes2; 
+      if ((:vRes1= 0) or (:vRes2= 0)) then oRes=0;
+      else oRes=1;
+      if (:vEI1 is null) then vEI1=0; 
+      if (:vEI2 is null) then vEI2=0; 
+
+      if((:vTypeRes1=:vTypeRes2)and (:vEI1=:vEI2) and (:vRes1=1) and (:vRes2=1))then
+        if (:vTypeF=154)then
+          begin
+            if ((:vValInt1 is not null) and (:vValInt2 is not null)) then                
+              if(:vValInt1 < :vValInt2) then oValBool=1;
+              else oValBool=0;
+            else
+              if ((:vValReal1 is not null) and (:vValReal2 is not null)) then              
+                if(:vValReal1 < :vValReal2) then oValBool=1;
+                else oValBool=0;
+              else
+                if ((:vValDate1 is not null) and (:vValDate2 is not null)) then  
+                  if(:vValDate1 < :vValDATE2) then oValBool=1;
+                  else oValBool=0;
+          end
+        else
+        if (:vTypeF=155)then
+          begin
+            if((:vValInt1 is not null) and (:vValInt2 is not null)) then               
+              if((:vValInt1 < :vValInt2) or (:vValInt1 = :vValInt2))then oValBool=1;
+              else oValBool=0;
+            else
+              if((:vValReal1 is not null) and (:vValReal2 is not null)) then   /* 155 <=, 118 real*/
+                if((:vValReal1 < :vValReal2) or (:vValReal1 = :vValReal2))then oValBool=1;
+                else oValBool=0;
+              else
+                if ((:vValDate1 is not null) and (:vValDate2 is not null)) then  /* 155 <=, 115 date*/
+                  if((:vValDate1 < :vValDate2) or (:vValDate1 = :vValDate2)) then oValBool=1;
+                  else oValBool=0;
+          end
+        else  
+        if (:vTypeF=156)then
+          begin
+            if((:vValInt1 is not null) and (:vValInt2 is not null)) then  
+              if(:vValInt1 = :vValInt2) then oValBool=1;
+              else oValBool=0;
+            else
+              if((:vValReal1 is not null) and (:vValReal2 is not null))  then 
+                begin
+                  if(:vValReal1 = :vValReal2) then oValBool=1;
+                  else oValBool=0;
+                end
+              else
+                if((:vValDate1 is not null) and (:vValDate2 is not null)) then 
+                  begin
+                    if(:vValDate1 = :vValDate2) then oValBool=1;
+                    else oValBool=0;
+                  end
+                else
+                  if ((:vValCh1  is not null) and (:vValCh2  is not null)) then 
+                    begin
+                      if(:vValCh1 = :vValCh2) then oValBool=1;
+                      else oValBool=0;
+                    end
+                  else  
+                    if((:vClRes1 is not null) and (:vClRes2 is not null)) then /* 156 =, 109 роль-class*/
+                      select oYes from IN_GR(:vClRes2,:vClRes1) 
+                        into :oValBool;
+                    else
+                      if ((:vObRes1 is not null) and (:vObRes2 is not null))  then
+                        begin
+                          if(:vObRes1 = :vObRes2) then oValBool=1;
+                          else oValBool=0;
+                        end
+                      else
+                        if ((:vEnumRes1 is not null) and (:vEnumRes2 is not null)) then
+                          begin
+                            if(:vEnumRes1 = :vEnumRes2) then oValBool=1;
+                            else oValBool=0;
+                          end
+                        else
+                          if((:vValBool1 is not null) and (:vValBool2 is not null)) then /* 156 =, 153 bool*/
+                            begin
+                              if(:vValBool1 = :vValBool2) then oValBool=1;
+                              else oValBool=0;
+                            end  
+          end
+         else
+           if (:vTypeF= 157) then         
+             begin
+               if((:vValInt1 is not null) and (:vValInt2 is not null)) then  
+                 if((:vValInt1 > :vValInt2) or (:vValInt1 = :vValInt2)) then oValBool=1;
+                 else oValBool=0;
+               else
+                 if((:vValReal1 is not null) and (:vValReal2 is not null)) then  
+                   if((:vValReal1 > :vValReal2) or (:vValReal1 = :vValReal2)) then oValBool=1;
+                   else oValBool=0;
+                 else 
+                   if((:vValDate1 is not null) and (:vValDate2 is not null)) then 
+                     if ((:vValDate1 > :vValDate2) or (:vValDate1 = :vValDate2)) then oValBool=1;
+                     else oValBool=0;
+             end
+           else
+              if (:vTypeF= 158) then         
+                begin
+                  if((:vValInt1 is not null) and (:vValInt2 is not null)) then  
+                    if(:vValInt1 > :vValInt2) then oValBool=1;
+                    else oValBool=0;
+                  else
+                    if((:vValReal1 is not null) and (:vValReal2 is not null)) then 
+                      if(:vValReal1 > :vValReal2) then oValBool=1;
+                      else oValBool=0;
+                  else 
+                    if((:vValDate1 is not null) and (:vValDate2 is not null))then 
+                      if(:vValDate1 > :vValDate2) then oValBool=1;
+                      else oValBool=0;
+                end   
+       select oRes from UPDATE_VAL_ROLE(:pIdPred, :pIdOb2,null,
+          null,null, null,null,null,null,:oValBool)  
+          into :oRes;
+    end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_AR (
+    PIDAR integer,
+    PIDOB1 integer,
+    PIDOB2 integer)
+returns (
+    OYESOB integer,
+    OYESAR integer,
+    OVALAR double precision,
+    ORES integer)
+as
+declare variable VTYPEF integer;
+declare variable VTYPERES integer;
+declare variable VTYPEF1 integer;
+declare variable VTYPERES1 integer;
+declare variable VEI integer;
+declare variable VCLOB integer;
+declare variable VRES integer;
+declare variable VARG integer;
+declare variable VNUM integer;
+declare variable VIDOB integer;
+declare variable VVALREAL double precision;
+declare variable VVALAR double precision;
+begin
+
+/*функция: Вычисляет значение арифметического выражения pIdAr из pIdOb1;
+  вход: pIdOb1 - ид. объекта 1,
+        pIdAr - id арифметического выражения,
+  выход: oYesOb - есть объект,
+         oYesAr  - есть параметр,
+         oVal - значение,
+         oRes - 0 - ошибка, 1 - ок
+  требование: 1. Ограничение - значение  только 
+*/
+ 
+  vTypeF=null;
+  vTypeRes= null;
+  vValReal = 0;
+  vEI= null;
+  oRes=0;
+  vRes=0; 
+  vNum=0;
+  select count(*) from PROD
+    where ID_PROD=:pIdOb1
+    into :oYesOb;
+  if (:oYesOb >0) then
+    select count(*) from PROD
+      where ID_PROD=:pIdOb2
+      into :oYesOb;
+  select TYPE_F,TYPE_RES,EI_R from FUNCT_R
+    where ID_F=:pIdAr
+    into :vTypeF,:vTypeRes,:vEI;
+  select oYes from IN_GR(141,:vTypeF)  /*id=141 - Арифметическое выражение*/
+          into :oYesAr; 
+  if ((:oYesAr=0) or (:oYesOb=0)) then oRes=0;
+  else
+    begin
+/*      select TYPE_F,TYPE_RES,EI_R from FUNCT_R
+        where ID_F=:pIdAr
+        into :vTypeF,:vTypeRes,:vEI;  */
+      if ((:vTypeF= 146) or (:vTypeF= 147))then vValAr= 0.0;
+      if ((:vTypeF= 148) or (:vTypeF= 149)) then vValAr= 1.0;
+/*читаем аргументы */ 
+      for select ARG,NUM_ARG  from ARG_FUNCT
+              where ID_F=:pIdAr
+              order by NUM_ARG
+              into :vArg, :vNum      do
+      begin
+        select TYPE_F,TYPE_RES,CL_OB from FUNCT_R
+          where ID_F=:vArg
+          into :vTypeF1,:vTypeRes1,:vClOb;
+        select  oValReal,oRes  from CALC_VAL_F(:vArg, :pIdOb1,:pIdOb2)
+          into :vValReal,:vRes; 
+        if ((:vTypeF= 146) and (:vValReal is not null)) then   /*146 - sum*/
+           vValAr=vValAr+vValReal;
+        else
+          begin
+            if ((:vTypeF= 148) and (:vValReal is not null)) then  /*148 - умн.*/
+              vValAr=vValAr*vValReal;
+            else
+              begin
+                if ((:vTypeF= 147) and (:vValReal is not null)) then  /*147 - выч.*/
+                  if (:vNum=1) then vValAr=vValReal;
+                  else vValAr= vValAr - vValReal;
+                else
+                  begin
+                    if ((:vTypeF= 149) and (:vValReal is not null)) then  /*149 - дел.*/
+                      if (:vNum=1) then vValAr=vValReal;
+                      else vValAr= vValAr/ vValReal;
+                  end
+              end
+          end
+      end
+      oValAr=vValAr;
+      select oRes from UPDATE_VAL_ROLE(:pIdAr, :pIdOb1,null,
+          null,:vValAr, null,null,null,null,null)  
+          into :oRes;
+    end
+    suspend;
+  end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_LOG (
+    PIDLOG integer,
+    PIDOB1 integer,
+    PIDOB2 integer)
+returns (
+    OYESOB integer,
+    OYESLOG integer,
+    OVALBOOL integer,
+    ORES integer)
+as
+declare variable VTYPEF integer;
+declare variable VTYPERES integer;
+declare variable VTYPEF1 integer;
+declare variable VTYPERES1 integer;
+declare variable VEI integer;
+declare variable VCLOB integer;
+declare variable VRES integer;
+declare variable VARG integer;
+declare variable VNUM integer;
+declare variable VVALLOG integer;
+declare variable VVALARG integer;
+declare variable VYESPRED integer;
+begin
+
+/*функция: Вычисляет значение логического выражения pIdLog из pIdOb1;
+  вход: pIdOb1 - ид. объекта 1,
+        pIdOb2 - ид. объекта 1,
+        pIdLog - id логического выражения,
+  выход: oYesOb - есть объект,
+         oYesLog  - есть параметр,
+         oValBool - значение,
+         oRes - 0 - ошибка, 1 - ок
+  требование: 1. Ограничение - значение  только 
+*/
+ 
+  vTypeF=null;
+  vTypeRes= null;
+  vYesPred= 0; 
+  vEI= null;
+  oRes=1;
+  vRes=0; 
+  vNum=0;
+  select count(*) from PROD
+    where ID_PROD=:pIdOb1
+    into :oYesOb;
+  if (:oYesOb >0) then
+    select count(*) from PROD
+      where ID_PROD=:pIdOb2
+      into :oYesOb;
+  select TYPE_F,TYPE_RES from FUNCT_R
+    where ID_F=:pIdLog
+    into :vTypeF,:vTypeRes;
+    oRes=1;
+  select oYes from IN_GR(145,:vTypeF)  /*145 - предикат*/
+        into :vYesPred;
+  if ((:vYesPred >0) and (:oYesOb = 1)) then      /*145 - предикат*/
+    begin
+      select oValBool from CALC_PRED(:pIdLog,:pIdOb1,:pIdOb2)
+        into :oValBool;
+      oRes=1;
+    end
+  else
+    begin
+      select oYes from IN_GR(143,:vTypeF)  /*id=143 - Логическое выражение*/
+        into :oYesLog;
+      if ((:oYesLog = 1) and (:oYesOb = 1)) then 
+        begin
+         if (:vTypeF= 150)then vValLog = 1;   /* 150 - and */
+         if ((:vTypeF= 151) or (:vTypeF= 152)) then vValLog = 0;  /* 151 - or */
+/*читаем аргументы */ 
+         for select ARG,NUM_ARG  from ARG_FUNCT
+               where ID_F=:pIdLog
+               order by NUM_ARG
+               into :vArg, :vNum      do
+         begin
+          select TYPE_F,TYPE_RES,CL_OB from FUNCT_R
+            where ID_F=:vArg
+            into :vTypeF1,:vTypeRes1,:vClOb;
+          select  oValBool,oRes  from FIND_VAL_PAR(:pIdOb1, :vArg)
+            into :vValArg,:vRes; 
+          if (:vValArg is null) then 
+            begin
+              if (:vTypeF1 = 145 ) then         /* 145 - pred */
+                select oValBool,oRes from CALC_PRED(:vArg,:pIdOb1,:pIdOb2)
+                  into :vValArg,:oRes;
+              else 
+                select oValBool,oRes from CALC_LOG(:vArg,:pIdOb1,:pIdOb2)
+                  into :vValArg,:oRes;
+            end
+          if ((:vTypeF= 150) and (:vValArg is not null)) then   /*150 - and*/
+            begin
+              if (:vValArg=0) then vValLog= 0;
+            end
+          else
+            if ((:vTypeF= 151) and (:vValArg is not null)) then  /*151 - or*/
+              begin
+                if (:vValArg=1) then vValLog= 1;
+              end
+            else
+              if ((:vTypeF= 152) and (:vValArg is not null)) then  /*152 - not*/
+                begin
+                  if (:vValArg= 1) then vValLog= 0;
+                  else vValLog = 1;
+                end
+         end
+        end
+      oValBool = vValLog;
+ /*     select oRes from UPDATE_VAL_ROLE(:pIdLog, :pIdOb1,null,
+                      null,null, null,null,null,null,:vValLog)  
+          into :oRes;  */
+    end
+  suspend;
+end^
+/**************************************************************/
+/**************************************************************/
+create or alter procedure CALC_VAL_F (
+    PIDF integer,
+    PIDOB1 integer,
+    PIDOB2 integer)
+returns (
+    OYESOB integer,
+    OYESF integer,
+    ONUM integer,
+    OVALCH varchar(50),
+    OVALINT integer,
+    OVALREAL double precision,
+    OVALDATE date,
+    OOBRES integer,
+    OCLRES integer,
+    OENUMRES integer,
+    OVALBOOL integer,
+    ORES integer)
+as
+declare variable VTYPEF integer;
+declare variable VTYPERES integer;
+declare variable VIFRULE integer;
+declare variable VYESRULE integer;
+declare variable VYESPRED integer;
+declare variable VYESLOG integer;
+declare variable VYESAR integer;
+declare variable VYESROLE integer;
+declare variable VYESCASE integer;
+declare variable VVALBOOL integer;
+declare variable VRULE integer;
+declare variable VARG integer;
+declare variable VIDOB integer;
+declare variable VCLOB integer;
+declare variable VYESIFRULE integer;
+begin
+
+/*функция: Вычисляет значение параметра pIdF объекта pIdOb на основе правил из pIdObRule;
+  вход: pIdOb1 - ид. объекта (услуги),
+        pIdF - вычисляемый параметр,
+        pIdOb2  - владелец правил;
+  выход: oYesOb - есть объект,
+         oYesF  - есть параметр,
+         oYesObRule - есть владелец правил,
+         oNum - номер значения,
+         oVal - значение,
+         oRes - 0 - ошибка, 1 - ок
+  требование: 1. Ограничение - значение  только для типа real (double precision
+*/
+  oYesOb=0;
+  oYesF=0;
+  vYesRule = 0;
+  vYesPred = 0;
+  vYesLog = 0;
+  vYesAr = 0;
+  vYesRole = 0;
+  vYesCase = 0;
+
+  vTypeF=0;
+  vTypeRes=0;
+  vIfRule=0;
+  oRes=1;
+  oValReal = null;
+  vRule = 0;
+  select count(*) from PROD
+    where ID_PROD=:pIdOb1
+    into :oYesOb;
+  if (:oYesOb >0) then
+    select count(*) from PROD
+      where ID_PROD=:pIdOb2
+      into :oYesOb;
+  select TYPE_F,TYPE_RES,IF_RULE, CL_OB from FUNCT_R
+    where ID_F=:pIdF
+    into :vTypeF,:vTypeRes,:vIfRule, :vClOb;
+  if (:vTypeF >0) then oYesF =1;  
+  if ((:oYesOb=0)or(:oYesF=0)) then oRes=0;
+  else
+    begin
+/* проверка наличия в решениях предикатов*/
+      select count(*) from DECISION_RULE
+        where THEN_RULE = :pIdF
+        into :vYesRule;
+      if (:vYesRule >0) then
+        begin
+          oValBool = 0;
+          for select ID_RULE from DECISION_RULE
+            where THEN_RULE = :pIdF
+            into :vRule      do
+          begin 
+            select oValBool, oRes from CALC_RULE(:pIdOb1,:vRule,:pIdOb2)
+             into :vValBool, :oRes;
+            if (:vValBool =1) then oValBool =1;
+          end
+        end 
+      if ((:oValBool =1)or (:vYesRule = 0)) then
+        begin
+          select oYes from IN_GR(143,:vTypeF)  /*id=143 - Логическое выражение*/
+            into :vYesLog; 
+          if (:vYesLog=1) then
+            select oValBool, oRes from CALC_LOG(:pIdF,:pIdOb1,:pIdOb2)
+              into :oValBool, :oRes;
+          else 
+            begin
+              select oYes from IN_GR(145,:vTypeF)  /*id=145 - Предикат*/
+                into :vYesPred;
+              if (:vYesPred=1) then
+                select oValBool, oRes from CALC_PRED(:pIdF,:pIdOb1,:pIdOb2)
+                into :oValBool, :oRes;
+              else
+                begin
+                  select oYes from IN_GR(141,:vTypeF)  /*id=141 - Арифм. выражение*/
+                    into :vYesAr;
+                  if (:vYesAr=1) then
+                    select oValAr, oRes from CALC_AR(:pIdF,:pIdOb1,:pIdOb2)
+                      into :oValReal, :oRes;
+                  else
+                    begin
+                      select oYes from IN_GR(108,:vTypeF)  /*id=1o8 - Роль*/
+                        into :vYesRole;
+                      if (:vYesRole > 0) then
+                        begin
+                          select count(*) from ARG_FUNCT
+                            where ID_F = :pIdF
+                            into :vYesCase;
+                          if (:vYesCase > 0) then 
+                            begin
+                              select oArg, oRes from CASE_ARG(:pIdF,:pIdOb1, :pIdOb2)
+                                into :vArg, :oRes;
+                    /*          select oValReal,oRes from FIND_VAL_PAR(:pIdOb2, :vArg)
+                                into :oValReal, :oRes;  */
+                              select oValReal,oRes from CALC_VAL_F(:vArg,:pIdOb1,:pIdOb2)
+                                into:oValReal, :oRes;  
+                            end 
+                          else
+                            begin
+                              select oYes from IN_GR(130,:vClOb)  /*id=130 - Тарифы на услуги*/
+                                into :vYesRole;
+                              if (:vYesRole >0) then vIdOb= pIdOb2;
+                              else vIdOb= pIdOb1;
+                              select oValReal,oRes from FIND_VAL_PAR(:vIdOb,:pIdF)
+                                into :oValReal, :oRes;
+                            end
+                        end
+                      else
+                          begin  
+                            select oYes from IN_GR(144,:vTypeF)  /*id=144 - Лог. выражение*/
+                              into :vYesLog;
+                            if (:vYesLog  = 1) then
+                              select oValBool from CALC_LOG(:pIdF,:pIdOb1,:pIdOb2)
+                                into :oValBool;
+                          end  
+                    end
+                end 
+            end
+        end
+    end       
+  suspend; 
+end^
+/**************************************************************/
+/**************************************************************/
+

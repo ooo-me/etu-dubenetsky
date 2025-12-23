@@ -397,7 +397,7 @@ BEGIN
             
             -- Если это первое решение с приоритетом 0, проверяем условие
             -- Если условие истинно или это безусловное решение, возвращаем результат
-            IF rec_decision.PRIORITET = 0 OR v_result <> 0 THEN
+            IF rec_decision.PRIORITЕТ = 0 OR v_result <> 0 THEN
                 RETURN v_result;
             END IF;
         EXCEPTION
@@ -412,6 +412,697 @@ END;
 $$;
 
 COMMENT ON FUNCTION CASE_ARG IS 'Функция выбора решения по условию (IF-THEN-ELSE)';
+
+-- ============================================================================
+-- CALC_ORDER_COST - Расчет стоимости заказа по тарифу
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION CALC_ORDER_COST(
+    p_id_order INTEGER,      -- ID заказа
+    p_id_tariff INTEGER DEFAULT NULL  -- ID тарифа (если NULL, используем тариф заказа)
+)
+RETURNS DOUBLE PRECISION
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_id_tariff INTEGER;
+    v_id_service_type INTEGER;
+    v_base_cost DOUBLE PRECISION := 0;
+    v_total_cost DOUBLE PRECISION := 0;
+    v_coeff DOUBLE PRECISION := 1.0;
+    v_is_with_vat INTEGER;
+    v_vat_rate DOUBLE PRECISION;
+    rec_rate RECORD;
+    rec_param RECORD;
+    rec_item RECORD;
+    rec_rule RECORD;
+    rec_coeff RECORD;
+BEGIN
+    -- Получаем информацию о заказе
+    SELECT ID_TARIFF, ID_SERVICE_TYPE INTO v_id_tariff, v_id_service_type
+    FROM SERVICE_ORDER
+    WHERE ID_ORDER = p_id_order;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Заказ с ID % не найден', p_id_order;
+    END IF;
+    
+    -- Используем переданный тариф или тариф заказа
+    v_id_tariff := COALESCE(p_id_tariff, v_id_tariff);
+    
+    IF v_id_tariff IS NULL THEN
+        RAISE EXCEPTION 'Для заказа % не указан тариф', p_id_order;
+    END IF;
+    
+    -- Получаем информацию о тарифе
+    SELECT IS_WITH_VAT, VAT_RATE INTO v_is_with_vat, v_vat_rate
+    FROM TARIFF
+    WHERE ID_TARIFF = v_id_tariff;
+    
+    -- Расчет по правилам тарифа
+    FOR rec_rule IN
+        SELECT tr.ID_FUNCT, tr.PRIORITY
+        FROM TARIFF_RULE tr
+        WHERE tr.ID_TARIFF = v_id_tariff AND tr.IS_ACTIVE = 1
+        ORDER BY tr.PRIORITY
+    LOOP
+        BEGIN
+            -- Здесь можно добавить логику вызова правил расчета
+            -- v_base_cost := v_base_cost + CALC_VAL_F(rec_rule.ID_FUNCT, ...);
+            NULL;
+        EXCEPTION
+            WHEN OTHERS THEN
+                CONTINUE;
+        END;
+    END LOOP;
+    
+    -- Расчет по ставкам тарифа
+    FOR rec_rate IN
+        SELECT tr.RATE_VALUE, tr.COD_RATE
+        FROM TARIFF_RATE tr
+        WHERE tr.ID_TARIFF = v_id_tariff
+    LOOP
+        -- Простой расчет: суммируем ставки
+        -- В реальности нужна более сложная логика сопоставления параметров
+        v_base_cost := v_base_cost + rec_rate.RATE_VALUE;
+    END LOOP;
+    
+    -- Применяем повышающие коэффициенты
+    FOR rec_coeff IN
+        SELECT tc.COEFF_VALUE
+        FROM TARIFF_COEFFICIENT tc
+        WHERE tc.ID_TARIFF = v_id_tariff
+    LOOP
+        v_coeff := v_coeff * rec_coeff.COEFF_VALUE;
+    END LOOP;
+    
+    v_total_cost := v_base_cost * v_coeff;
+    
+    -- Учитываем НДС
+    IF v_is_with_vat = 0 THEN
+        -- Тариф без НДС, добавляем НДС
+        v_total_cost := v_total_cost * (1 + v_vat_rate / 100);
+    END IF;
+    
+    -- Обновляем стоимость заказа
+    UPDATE SERVICE_ORDER
+    SET TOTAL_COST = v_total_cost, ID_TARIFF = v_id_tariff
+    WHERE ID_ORDER = p_id_order;
+    
+    RETURN v_total_cost;
+END;
+$$;
+
+COMMENT ON FUNCTION CALC_ORDER_COST IS 'Расчет стоимости заказа по тарифу';
+
+-- ============================================================================
+-- CALC_ORDER_ITEM_COST - Расчет стоимости позиции заказа
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION CALC_ORDER_ITEM_COST(
+    p_id_order_item INTEGER,
+    p_id_tariff INTEGER
+)
+RETURNS DOUBLE PRECISION
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_quantity DOUBLE PRECISION;
+    v_unit_cost DOUBLE PRECISION := 0;
+    v_total_cost DOUBLE PRECISION;
+    rec_param RECORD;
+    rec_rate RECORD;
+BEGIN
+    -- Получаем количество
+    SELECT QUANTITY INTO v_quantity
+    FROM ORDER_ITEM
+    WHERE ID_ORDER_ITEM = p_id_order_item;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Позиция заказа с ID % не найдена', p_id_order_item;
+    END IF;
+    
+    -- Находим подходящую ставку тарифа
+    -- Упрощенная логика: берем первую ставку
+    SELECT RATE_VALUE INTO v_unit_cost
+    FROM TARIFF_RATE
+    WHERE ID_TARIFF = p_id_tariff
+    LIMIT 1;
+    
+    v_unit_cost := COALESCE(v_unit_cost, 0);
+    v_total_cost := v_unit_cost * v_quantity;
+    
+    -- Обновляем позицию
+    UPDATE ORDER_ITEM
+    SET UNIT_COST = v_unit_cost, TOTAL_COST = v_total_cost
+    WHERE ID_ORDER_ITEM = p_id_order_item;
+    
+    RETURN v_total_cost;
+END;
+$$;
+
+COMMENT ON FUNCTION CALC_ORDER_ITEM_COST IS 'Расчет стоимости позиции заказа';
+
+-- ============================================================================
+-- FIND_OPTIMAL_EXECUTOR - Поиск оптимального исполнителя по стоимости
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION FIND_OPTIMAL_EXECUTOR(
+    p_id_service_type INTEGER,
+    p_target_date DATE DEFAULT CURRENT_DATE
+)
+RETURNS TABLE (
+    executor_id INTEGER,
+    executor_name VARCHAR,
+    tariff_id INTEGER,
+    tariff_name VARCHAR,
+    estimated_cost DOUBLE PRECISION
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        e.ID_EXECUTOR,
+        e.NAME_EXECUTOR,
+        t.ID_TARIFF,
+        t.NAME_TARIFF,
+        (SELECT COALESCE(SUM(tr.RATE_VALUE), 0) FROM TARIFF_RATE tr WHERE tr.ID_TARIFF = t.ID_TARIFF) as estimated_cost
+    FROM EXECUTOR e
+    JOIN TARIFF t ON t.ID_EXECUTOR = e.ID_EXECUTOR
+    WHERE e.IS_ACTIVE = 1
+      AND t.IS_ACTIVE = 1
+      AND t.ID_SERVICE_TYPE = p_id_service_type
+      AND t.DATE_BEGIN <= p_target_date
+      AND (t.DATE_END IS NULL OR t.DATE_END >= p_target_date)
+    ORDER BY estimated_cost ASC;
+END;
+$$;
+
+COMMENT ON FUNCTION FIND_OPTIMAL_EXECUTOR IS 'Поиск оптимального исполнителя по стоимости для типа услуги';
+
+-- ============================================================================
+-- FIND_OPTIMAL_TARIFF - Поиск оптимального тарифа для заказа
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION FIND_OPTIMAL_TARIFF(
+    p_id_order INTEGER
+)
+RETURNS TABLE (
+    tariff_id INTEGER,
+    tariff_name VARCHAR,
+    executor_name VARCHAR,
+    estimated_cost DOUBLE PRECISION
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_id_service_type INTEGER;
+    v_order_date DATE;
+BEGIN
+    -- Получаем тип услуги и дату заказа
+    SELECT ID_SERVICE_TYPE, EXECUTION_DATE INTO v_id_service_type, v_order_date
+    FROM SERVICE_ORDER
+    WHERE ID_ORDER = p_id_order;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Заказ с ID % не найден', p_id_order;
+    END IF;
+    
+    v_order_date := COALESCE(v_order_date, CURRENT_DATE);
+    
+    RETURN QUERY
+    SELECT 
+        t.ID_TARIFF,
+        t.NAME_TARIFF,
+        COALESCE(e.NAME_EXECUTOR, 'Без исполнителя'::VARCHAR) as executor_name,
+        CALC_ORDER_COST(p_id_order, t.ID_TARIFF) as estimated_cost
+    FROM TARIFF t
+    LEFT JOIN EXECUTOR e ON t.ID_EXECUTOR = e.ID_EXECUTOR
+    WHERE t.IS_ACTIVE = 1
+      AND t.ID_SERVICE_TYPE = v_id_service_type
+      AND t.DATE_BEGIN <= v_order_date
+      AND (t.DATE_END IS NULL OR t.DATE_END >= v_order_date)
+    ORDER BY estimated_cost ASC;
+END;
+$$;
+
+COMMENT ON FUNCTION FIND_OPTIMAL_TARIFF IS 'Поиск оптимального тарифа для заказа';
+
+-- ============================================================================
+-- VALIDATE_ORDER - Валидация заказа
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION VALIDATE_ORDER(
+    p_id_order INTEGER
+)
+RETURNS TABLE (
+    is_valid BOOLEAN,
+    error_message TEXT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_id_service_type INTEGER;
+    v_order_exists BOOLEAN;
+    rec_param RECORD;
+    v_errors TEXT := '';
+    v_is_valid BOOLEAN := TRUE;
+BEGIN
+    -- Проверяем существование заказа
+    SELECT EXISTS(SELECT 1 FROM SERVICE_ORDER WHERE ID_ORDER = p_id_order) INTO v_order_exists;
+    
+    IF NOT v_order_exists THEN
+        RETURN QUERY SELECT FALSE, 'Заказ не найден'::TEXT;
+        RETURN;
+    END IF;
+    
+    -- Получаем тип услуги
+    SELECT ID_SERVICE_TYPE INTO v_id_service_type
+    FROM SERVICE_ORDER
+    WHERE ID_ORDER = p_id_order;
+    
+    -- Проверяем наличие обязательных параметров
+    FOR rec_param IN
+        SELECT stp.ID_PAR, p.NAME_PAR, stp.MIN_VAL, stp.MAX_VAL
+        FROM SERVICE_TYPE_PARAM stp
+        JOIN PARAMETR1 p ON stp.ID_PAR = p.ID_PAR
+        WHERE stp.ID_SERVICE_TYPE = v_id_service_type
+          AND stp.IS_REQUIRED = 1
+    LOOP
+        -- Проверяем, есть ли значение параметра в заказе
+        IF NOT EXISTS(
+            SELECT 1 FROM ORDER_PARAM op
+            WHERE op.ID_ORDER = p_id_order
+              AND op.ID_PAR = rec_param.ID_PAR
+              AND (op.VAL_NUM IS NOT NULL OR op.VAL_STR IS NOT NULL OR 
+                   op.VAL_DATE IS NOT NULL OR op.ID_VAL_ENUM IS NOT NULL)
+        ) THEN
+            v_is_valid := FALSE;
+            v_errors := v_errors || 'Не задан обязательный параметр: ' || rec_param.NAME_PAR || '; ';
+        ELSE
+            -- Проверяем ограничения min/max для числовых параметров
+            IF rec_param.MIN_VAL IS NOT NULL OR rec_param.MAX_VAL IS NOT NULL THEN
+                DECLARE
+                    v_val DOUBLE PRECISION;
+                BEGIN
+                    SELECT VAL_NUM INTO v_val
+                    FROM ORDER_PARAM
+                    WHERE ID_ORDER = p_id_order AND ID_PAR = rec_param.ID_PAR;
+                    
+                    IF v_val IS NOT NULL THEN
+                        IF rec_param.MIN_VAL IS NOT NULL AND v_val < rec_param.MIN_VAL THEN
+                            v_is_valid := FALSE;
+                            v_errors := v_errors || 'Параметр ' || rec_param.NAME_PAR || 
+                                        ' меньше минимального значения (' || rec_param.MIN_VAL || '); ';
+                        END IF;
+                        
+                        IF rec_param.MAX_VAL IS NOT NULL AND v_val > rec_param.MAX_VAL THEN
+                            v_is_valid := FALSE;
+                            v_errors := v_errors || 'Параметр ' || rec_param.NAME_PAR || 
+                                        ' больше максимального значения (' || rec_param.MAX_VAL || '); ';
+                        END IF;
+                    END IF;
+                END;
+            END IF;
+        END IF;
+    END LOOP;
+    
+    IF v_errors = '' THEN
+        v_errors := 'OK';
+    END IF;
+    
+    RETURN QUERY SELECT v_is_valid, v_errors;
+END;
+$$;
+
+COMMENT ON FUNCTION VALIDATE_ORDER IS 'Валидация заказа: проверка обязательных параметров и ограничений';
+
+-- ============================================================================
+-- GET_ALL_EI - Получение всех единиц измерения
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_EI()
+RETURNS TABLE (
+    id_ei INTEGER,
+    cod_ei VARCHAR,
+    name_ei VARCHAR,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY SELECT e.ID_EI, e.COD_EI, e.NAME_EI, e.NOTE FROM EI e ORDER BY e.ID_EI;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_ENUMS - Получение всех перечислений
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_ENUMS()
+RETURNS TABLE (
+    id_enum INTEGER,
+    cod_enum VARCHAR,
+    name_enum VARCHAR,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY SELECT e.ID_ENUM, e.COD_ENUM, e.NAME_ENUM, e.NOTE FROM ENUM_VAL_R e ORDER BY e.ID_ENUM;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ENUM_VALUES - Получение значений перечисления
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ENUM_VALUES(p_id_enum INTEGER)
+RETURNS TABLE (
+    id_pos_enum INTEGER,
+    cod_pos VARCHAR,
+    name_pos VARCHAR,
+    num_pos INTEGER,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT pe.ID_POS_ENUM, pe.COD_POS, pe.NAME_POS, pe.NUM_POS, pe.NOTE 
+    FROM POS_ENUM pe 
+    WHERE pe.ID_ENUM = p_id_enum
+    ORDER BY pe.NUM_POS;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_CLASSES - Получение всех классов
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_CLASSES()
+RETURNS TABLE (
+    id_chem INTEGER,
+    cod_chem VARCHAR,
+    name_chem VARCHAR,
+    parent_id INTEGER,
+    lev INTEGER,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT c.ID_CHEM, c.COD_CHEM, c.NAME_CHEM, c.PARENT_ID, c.LEV, c.NOTE 
+    FROM CHEM_CLASS c 
+    ORDER BY c.LEV, c.ID_CHEM;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_SERVICE_TYPES - Получение всех типов услуг
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_SERVICE_TYPES()
+RETURNS TABLE (
+    id_service_type INTEGER,
+    cod_service VARCHAR,
+    name_service VARCHAR,
+    id_class INTEGER,
+    class_name VARCHAR,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT st.ID_SERVICE_TYPE, st.COD_SERVICE, st.NAME_SERVICE, st.ID_CLASS, 
+           c.NAME_CHEM as class_name, st.NOTE 
+    FROM SERVICE_TYPE st
+    LEFT JOIN CHEM_CLASS c ON st.ID_CLASS = c.ID_CHEM
+    ORDER BY st.ID_SERVICE_TYPE;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_EXECUTORS - Получение всех исполнителей
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_EXECUTORS()
+RETURNS TABLE (
+    id_executor INTEGER,
+    cod_executor VARCHAR,
+    name_executor VARCHAR,
+    address TEXT,
+    phone VARCHAR,
+    email VARCHAR,
+    is_active INTEGER,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT e.ID_EXECUTOR, e.COD_EXECUTOR, e.NAME_EXECUTOR, e.ADDRESS, 
+           e.PHONE, e.EMAIL, e.IS_ACTIVE, e.NOTE 
+    FROM EXECUTOR e 
+    ORDER BY e.ID_EXECUTOR;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_TARIFFS - Получение всех тарифов
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_TARIFFS()
+RETURNS TABLE (
+    id_tariff INTEGER,
+    cod_tariff VARCHAR,
+    name_tariff VARCHAR,
+    id_service_type INTEGER,
+    service_name VARCHAR,
+    id_executor INTEGER,
+    executor_name VARCHAR,
+    date_begin DATE,
+    date_end DATE,
+    is_with_vat INTEGER,
+    vat_rate DOUBLE PRECISION,
+    is_active INTEGER,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT t.ID_TARIFF, t.COD_TARIFF, t.NAME_TARIFF, t.ID_SERVICE_TYPE,
+           st.NAME_SERVICE as service_name, t.ID_EXECUTOR,
+           e.NAME_EXECUTOR as executor_name, t.DATE_BEGIN, t.DATE_END,
+           t.IS_WITH_VAT, t.VAT_RATE, t.IS_ACTIVE, t.NOTE 
+    FROM TARIFF t
+    LEFT JOIN SERVICE_TYPE st ON t.ID_SERVICE_TYPE = st.ID_SERVICE_TYPE
+    LEFT JOIN EXECUTOR e ON t.ID_EXECUTOR = e.ID_EXECUTOR
+    ORDER BY t.ID_TARIFF;
+END;
+$$;
+
+-- ============================================================================
+-- GET_TARIFF_RATES - Получение ставок тарифа
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_TARIFF_RATES(p_id_tariff INTEGER)
+RETURNS TABLE (
+    id_tariff_rate INTEGER,
+    cod_rate VARCHAR,
+    name_rate VARCHAR,
+    rate_value DOUBLE PRECISION,
+    id_ei INTEGER,
+    unit_name VARCHAR,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT tr.ID_TARIFF_RATE, tr.COD_RATE, tr.NAME_RATE, tr.RATE_VALUE,
+           tr.ID_EI, ei.NAME_EI as unit_name, tr.NOTE 
+    FROM TARIFF_RATE tr
+    LEFT JOIN EI ei ON tr.ID_EI = ei.ID_EI
+    WHERE tr.ID_TARIFF = p_id_tariff
+    ORDER BY tr.ID_TARIFF_RATE;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_ORDERS - Получение всех заказов
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_ORDERS()
+RETURNS TABLE (
+    id_order INTEGER,
+    cod_order VARCHAR,
+    id_service_type INTEGER,
+    service_name VARCHAR,
+    order_date DATE,
+    execution_date DATE,
+    status INTEGER,
+    status_name VARCHAR,
+    id_executor INTEGER,
+    executor_name VARCHAR,
+    id_tariff INTEGER,
+    tariff_name VARCHAR,
+    total_cost DOUBLE PRECISION,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT o.ID_ORDER, o.COD_ORDER, o.ID_SERVICE_TYPE,
+           st.NAME_SERVICE as service_name, o.ORDER_DATE, o.EXECUTION_DATE,
+           o.STATUS,
+           CASE o.STATUS 
+               WHEN 0 THEN 'Новый'
+               WHEN 1 THEN 'В работе'
+               WHEN 2 THEN 'Выполнен'
+               WHEN 3 THEN 'Отменен'
+               ELSE 'Неизвестно'
+           END::VARCHAR as status_name,
+           o.ID_EXECUTOR, e.NAME_EXECUTOR as executor_name,
+           o.ID_TARIFF, t.NAME_TARIFF as tariff_name,
+           o.TOTAL_COST, o.NOTE 
+    FROM SERVICE_ORDER o
+    LEFT JOIN SERVICE_TYPE st ON o.ID_SERVICE_TYPE = st.ID_SERVICE_TYPE
+    LEFT JOIN EXECUTOR e ON o.ID_EXECUTOR = e.ID_EXECUTOR
+    LEFT JOIN TARIFF t ON o.ID_TARIFF = t.ID_TARIFF
+    ORDER BY o.ID_ORDER DESC;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ORDER_PARAMS - Получение параметров заказа
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ORDER_PARAMS(p_id_order INTEGER)
+RETURNS TABLE (
+    id_par INTEGER,
+    cod_par VARCHAR,
+    name_par VARCHAR,
+    type_par INTEGER,
+    val_num DOUBLE PRECISION,
+    val_str TEXT,
+    val_date DATE,
+    id_val_enum INTEGER,
+    enum_name VARCHAR,
+    unit_name VARCHAR
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT op.ID_PAR, p.COD_PAR, p.NAME_PAR, p.TYPE_PAR,
+           op.VAL_NUM, op.VAL_STR, op.VAL_DATE, op.ID_VAL_ENUM,
+           pe.NAME_POS as enum_name, ei.NAME_EI as unit_name
+    FROM ORDER_PARAM op
+    JOIN PARAMETR1 p ON op.ID_PAR = p.ID_PAR
+    LEFT JOIN POS_ENUM pe ON op.ID_VAL_ENUM = pe.ID_POS_ENUM
+    LEFT JOIN EI ei ON p.EI = ei.ID_EI
+    WHERE op.ID_ORDER = p_id_order
+    ORDER BY p.ID_PAR;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_PARAMETERS - Получение всех параметров
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_PARAMETERS()
+RETURNS TABLE (
+    id_par INTEGER,
+    cod_par VARCHAR,
+    name_par VARCHAR,
+    class_par INTEGER,
+    type_par INTEGER,
+    type_name VARCHAR,
+    id_ei INTEGER,
+    unit_name VARCHAR,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT p.ID_PAR, p.COD_PAR, p.NAME_PAR, p.CLASS_PAR, p.TYPE_PAR,
+           CASE p.TYPE_PAR 
+               WHEN 0 THEN 'Число'
+               WHEN 1 THEN 'Строка'
+               WHEN 2 THEN 'Дата'
+               WHEN 3 THEN 'Перечисление'
+               ELSE 'Неизвестно'
+           END::VARCHAR as type_name,
+           p.EI, ei.NAME_EI as unit_name, p.NOTE
+    FROM PARAMETR1 p
+    LEFT JOIN EI ei ON p.EI = ei.ID_EI
+    ORDER BY p.ID_PAR;
+END;
+$$;
+
+-- ============================================================================
+-- GET_ALL_COEFFICIENTS - Получение всех коэффициентов
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_ALL_COEFFICIENTS()
+RETURNS TABLE (
+    id_coefficient INTEGER,
+    cod_coeff VARCHAR,
+    name_coeff VARCHAR,
+    value_min DOUBLE PRECISION,
+    value_max DOUBLE PRECISION,
+    value_default DOUBLE PRECISION,
+    note TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT c.ID_COEFFICIENT, c.COD_COEFF, c.NAME_COEFF,
+           c.VALUE_MIN, c.VALUE_MAX, c.VALUE_DEFAULT, c.NOTE
+    FROM COEFFICIENT c
+    ORDER BY c.ID_COEFFICIENT;
+END;
+$$;
+
+-- ============================================================================
+-- GET_SERVICE_TYPE_PARAMS - Получение параметров типа услуги
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION GET_SERVICE_TYPE_PARAMS(p_id_service_type INTEGER)
+RETURNS TABLE (
+    id_par INTEGER,
+    cod_par VARCHAR,
+    name_par VARCHAR,
+    type_par INTEGER,
+    is_required INTEGER,
+    default_val_num DOUBLE PRECISION,
+    default_val_str TEXT,
+    min_val DOUBLE PRECISION,
+    max_val DOUBLE PRECISION,
+    unit_name VARCHAR
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT stp.ID_PAR, p.COD_PAR, p.NAME_PAR, p.TYPE_PAR,
+           stp.IS_REQUIRED, stp.DEFAULT_VAL_NUM, stp.DEFAULT_VAL_STR,
+           stp.MIN_VAL, stp.MAX_VAL, ei.NAME_EI as unit_name
+    FROM SERVICE_TYPE_PARAM stp
+    JOIN PARAMETR1 p ON stp.ID_PAR = p.ID_PAR
+    LEFT JOIN EI ei ON p.EI = ei.ID_EI
+    WHERE stp.ID_SERVICE_TYPE = p_id_service_type
+    ORDER BY p.ID_PAR;
+END;
+$$;
 
 -- ============================================================================
 -- Конец скрипта процедур калькулятора

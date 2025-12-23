@@ -1,0 +1,2350 @@
+/**************************************************************/
+/**************************************************************/
+Приложение 2 для задания 4.1, 01.10.2025
+/**************************************************************/
+Обновленная версия для моделирования правил и ограничений
+/**************************************************************/
+/******      Скрипты изменения 11.07.2025  Задание 2.3-2       ****/
+/****************************************************************/
+/*
+Добавить перечисление Вариант конфигурации 118  104 13
+Значения  в POS_ENUM^
+10   1   БК   Без конфигуратора
+11   2   Ш    Шаблон
+12   3   ВИ   Вариант исполнения  */
+
+/*Изменить поле в PROD */
+ALTER TABLE add VAR_CONF_VAR integer;
+ALTER TABLE PROD ADD FOREIGN KEY (CONF_VAR) REFERENCES POS_ENUM (ID_POS);
+/****************************************************************/
+/****************************************************************/
+/* Новая процедура для создания продукта  */
+create or alter procedure INS_PROD2 (
+    PIDCLASS integer,
+    PSHNAME varchar(15),
+    PNAME varchar(100),
+    PCONF integer,
+    PTYPEPROD integer)
+returns (
+    OIDPROD integer,
+    ORES integer)
+as
+declare variable VYESCLASS integer;
+declare variable VYESTERM integer;
+begin
+/*функция: Создает новый экземпляр продукции
+  вход:pIdClass - ид. продукта
+       pShName - обозначение продукта
+       pName - имя продукта
+  выход: oIdProd - ид. нового продукта
+         oRes - 0 - ошибка 1 - список сформирован
+  эффекты: */
+
+  if(:pTypeProd=0) then pTypeProd = null;
+  oRes=0;
+  select count(*) from CHEM_CLASS
+    where ID_CLASS=:pIdClass
+    into :vYesClass;
+  if(:vYesClass =1) then
+    begin
+      select count(*) from CHEM_CLASS
+        where MAIN_CLASS=:pIdClass
+        into :vYesTerm;
+      if(:vYesTerm=0) then
+        begin
+          oRes=1;
+          select oNew from GEN_ID_PROD
+            into :oIdProd;
+          insert into  PROD(ID_PROD,SHORT_NAME,  NAME,ID_CL,
+                                         CONF,TYPE_PROD)
+            values(:oIdProd,:pShName,:pName,:pIdClass,:pConf, 
+                                              :pTypeProd); 
+         select oRes from COPY_PAR_PROD(:oIdProd)
+            into :oRes;
+        end
+    end
+  suspend;
+end 
+/****************************************************************/
+/****************************************************************/
+/*Создание шаблона для примера класс 14, Шаблон 11 */
+select * from INS_PROD2(
+14,
+‘ВПСПУ’,
+‘Воздуховод прямоугольного сечения, прямой участок’,
+11,
+null);
+/*ID_PROD = 15 */
+/****************************************************************/
+/****************************************************************/
+/* Создаем вариант исполнения на основе шаблона 15
+select * from INS_PROD2 (
+    14, /*PIDCLASS */
+    ‘ВПСПУ’, /*  PSHNAME*/
+    ‘‘Воздуховод прямоугольного сечения, прямой участок’’, /*PNAME */
+    12, /*PCONF – вариант исполнения */
+    15)/* по шаблону*/
+/*ID_PROD = 107*/
+/****************************************************************/
+/****************************************************************/
+
+15  ВПСПУ .......   Параметры 1,3, 4, 5, 6
+97 Переход.......   Параметры 1, 2,,3, 4, 5, 6
+
+/*****************************************************************/
+/*Добавляем поле FLAG_CONF для пометки полей */
+alter table PAR_CLASS1 add FLAG_CONF  integer ;
+/*****************************************************************/
+/*****************************************************************/
+/*Вносим изменения в процедуру ADD_PARAMETR_CLASS1 */
+create or alter procedure ADD_PARAMETR_CLASS1 (
+    PIDPAR integer,
+    PIDCLASS integer,
+    PMINVAL double precision,
+    PMAXVAL double precision,
+     pFlagConf integer)
+returns (
+    ONUM integer,
+    ORES integer,
+    OIDCLASS integer)
+as
+declare variable VYES integer;
+declare variable VIDCLASS integer;
+begin
+/*функция: Добавляет новый параметр pIdPar для класса pIdClass
+  вход: pIdPar - ид. параметра
+       pIdClass - ид.класса
+       pMinVal -  доп. мин. значение
+       pMaxVal -  доп. макс. значение 
+ pFlagConf  - флаг принадлежности параметра к конфигуратору (0 или null - нет, 1- да)
+  выход: oNum - порядковый номер параметра в списке класса
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 1. параметр добавляется классу и всем его потомкам
+*/
+  oRes=0;
+  for select oIdGr  from FIND_GR_GR (:pIdClass)
+        into :vIdClass
+  do
+    begin
+      select count(*) from PAR_CLASS1
+        where PAR = :pIdPar and CLASS =:vIdClass
+        into :vYes;
+      if (:vYes=0) then
+        begin
+          select MAX(NUM )from PAR_CLASS1
+            where CLASS=:vIdClass
+            into :oNum;
+          if(:oNum is null) then oNum=0;
+          oNum=oNum+1;
+          oRes=1;
+          insert into PAR_CLASS1(PAR,CLASS,NUM,MAX_VAL,MIN_VAL, FLAG_CONF)
+                     values(:pIdPar,:vIdClass,:oNum,:pMaxVal,:pMinVal,  :pFlagConf  ); 
+          oIdClass=vIdClass; 
+        end
+      else
+        begin
+          update PAR_CLASS1
+            set MAX_VAL=:pMaxVal,
+                MIN_VAL=:pMinVal
+            where CLASS =:vIdClass and PAR=:pIdPar;
+          oRes=1;  
+        end
+      suspend;
+    end
+end
+/*****************************************************************/
+/*******************Версия с составным ключем ********************/
+create or alter procedure COPY_PAR_PROD (
+    PIDPROD integer)
+returns (
+    ORES integer)
+as
+declare variable VPAR integer;
+declare variable VIDCLASS integer;
+declare variable VYES integer;
+declare variable VFlag integer;
+
+begin
+/*функция: Формирует список для значений параметров экземпляра pIdProd на основе параметров его класса
+  вход:pIdProd - ид. продукта
+  выход:oRes - 0 - ошибка 1 - список сформирован
+  эффекты: */
+  oRes=0;
+  vYes=1;
+  vPar=0;
+  select ID_CL from PROD
+    where ID_PROD=:pIdProd
+    into :vIdClass; 
+  for select p1.PAR, p1.FLAG_CONF  from PAR_CLASS1 p1
+        where p1.CLASS=:vIdClass
+        into :vPar, :vFlag
+  do
+  begin
+    select count(*) from PAR_PROD1
+      where PROD=:pIdProd and PAR=:vPar
+      into :vYes;
+    if (:vYes=0) then
+      begin
+        insert into PAR_PROD1(PROD,PAR, FLAG_CONF)
+              values ( :pIdProd,:vPar, :vFlag);
+        oRes=1;
+      end
+     else
+        oRes=0;
+    suspend;
+  end
+end
+/*****************************************************************/
+/*******************Версия с простым   ключем ********************/
+create or alter procedure COPY_PAR_PROD1 (
+    PIDPROD integer)
+returns (
+    ORES integer)
+as
+declare variable VPAR integer;
+declare variable VIDCLASS integer;
+declare variable VYES integer;
+declare variable VFlag integer;
+declare variable vIdParProd integer;
+
+begin
+/*функция: Формирует список для значений параметров экземпляра pIdProd на основе параметров его класса
+  вход:pIdProd - ид. продукта
+  выход:oRes - 0 - ошибка 1 - список сформирован
+  эффекты: */
+  oRes=0;
+  vYes=1;
+  vPar=0;
+  select ID_CL from PROD
+    where ID_PROD=:pIdProd
+    into :vIdClass; 
+  for select p1.PAR, p1.FLAG_CONF  from PAR_CLASS1 p1
+        where p1.CLASS=:vIdClass
+        into :vPar, :vFlag
+  do
+  begin
+    select count(*) from PAR_PROD2
+      where ID_PROD=:pIdProd and ID_PAR=:vPar
+      into :vYes;
+    if (:vYes=0) then
+      begin
+        select oNew from GEN_ID_PAR_PROD
+           into :vIdParProd; 
+        insert into PAR_PROD2(ID_PAR_PROD,ID_PROD,ID_PAR, FLAG_CONF)
+              values ( :vIdParProd,:pIdProd,:vPar, :vFlag);
+        oRes=1;
+      end
+     else
+        oRes=0;
+    suspend;
+  end
+end
+/*****************************************************************/
+/*****************************************************************/
+/*Для варианта исполнения удобно копировать параметры с их значениями от шаблона*/
+create or alter procedure COPY_PAR_PROD_PROD (
+    PIDPROD integer, pTypeProd integer)
+returns (
+    ORES integer)
+as
+declare variable VPAR integer;
+declare variable VIDCLASS integer;
+declare variable VYES integer;
+declare variable VFlag integer;
+declare variable vValInt integer;
+declare variable  vValR double precision;
+declare variable vValStr varchar(100);
+declare variable vValEnum integer;
+declare variable vIdParProd integer;
+
+begin
+/*функция: Копирует список для значений параметров экземпляра pTypeProd  для pIdProd
+  вход:pIdProd - ид. продукта варианта
+       pTypeProd - ид. шаблона
+  выход:oRes - 0 - ошибка 1 - список сформирован
+  эффекты: */
+  oRes=0;
+  vYes=1;
+  vPar=0;
+  /*select ID_CL from PROD
+    where ID_PROD=:pIdProd
+    into :vIdClass;  */
+  for select  p1.ID_PAR, p1.VAL_INT, p1.VAL_R, p1.VAL_STR, p1.VAL_ENUM, p1.FLAG_CONF  from PAR_PROD2 p1
+        where  p1.ID_PROD = :pTypeProd
+        into :vPar, :vValInt, :vValR,:vValStr,:vValEnum, :vFlag
+  do
+  begin
+    select count(*) from PAR_PROD2
+      where ID_PROD =:pIdProd and ID_PAR =:vPar
+      into :vYes;
+    if(:vYes=0) then
+      begin
+        select oNew from GEN_ID_PAR_PROD
+           into :vIdParProd; 
+        insert into PAR_PROD2(ID_PAR_PROD,ID_PROD, ID_PAR, VAL_INT, VAL_R, VAL_STR, VAL_ENUM,FLAG_CONF  )
+              values ( :vIdParProd,:pIdProd,:vPar, :vValInt, :vValR,:vValStr,:vValEnum,:vFlag);
+        oRes=1;
+      end
+     else
+        oRes=0;
+  end
+  suspend;
+end
+/*****************************************************************/
+/****************************************************************/
+create or alter procedure NEW_VAR_PROD (
+    PTYPEPROD integer)
+returns (
+    OIDPROD integer,
+    ONAME varchar(250),
+    OSHNAME varchar(50),
+    ORES integer)
+as
+declare variable VCONF integer;
+declare variable VIDCL integer;
+declare variable VYESTERM integer;
+begin
+/* функция: Создает вариант исполнения по прототипу типового изделия с параметрами
+  вход: pTypeProd
+  выход: OIDPROD - ид. варианта исполнения,
+    oName - имя варианта,
+    oShName - обозначение варианта,
+    ORES - oRes - 0 - ошибка, 1 - новый вариант создан
+*/
+  oRes=0;
+  select SHORT_NAME,NAME,VAR_CONF, ID_CL  from PROD
+    where ID_PROD=:pTypeProd
+    into :oShName,:oName,:vConf,:vIdCl; 
+  if (:vConf=11)  then
+    begin
+      oRes=1;
+      select oNew from GEN_ID_PROD
+        into :oIdProd;
+      insert into PROD(ID_PROD,SHORT_NAME,NAME,ID_CL,
+                              CONF,VAR_CONF,TYPE_PROD)
+            values(:oIdProd,:oShName,:oName,:vIdCl, 
+                                    2,12,:pTypeProd); 
+      select oRes from COPY_PAR_PROD_PROD( :oIdProd, :pTypeProd)
+        into :oRes;
+    end
+  suspend;
+end
+/*****************************************************************/
+/*****************************************************************/
+create or alter procedure WRITE_PAR_PROD1 (
+    PIDPROD integer,
+    PIDPAR integer,
+    PVAL double precision,
+    PVALSTR varchar(150),
+    PENUMVAL integer,
+    pValInt integer )
+returns (
+    ORES integer)
+as
+declare variable VYESPAR integer;
+declare variable VIDCLASS integer;
+declare variable VYESR integer;
+declare variable vYesInt integer;
+
+declare variable VYESEN integer;
+declare variable VYESSTR integer;
+declare variable VINT integer;
+declare variable VREAL integer;
+declare variable VSTR integer;
+declare variable VEN integer;
+declare variable VEI integer;
+declare variable VTYPEPAR integer;
+declare variable vTypeProd integer;
+declare variable vVarConf integer;
+declare variable VMINVAL double precision;
+declare variable VMAXVAL double precision;
+begin
+/* функция: Находит тип параметра, проверяет допустимость численного значения параметра экземпляра продукта и записывает его значение, проверяет наличие перечисления и его значения
+   вход:pIdProd - ид. продукта
+        pIdPar - ид. параметра
+        PVAL double precision,
+        PVALSTR varchar(150),
+        PENUMVAL integer,
+        pValInt integer )
+
+         
+   выход:oRes - 0 - ошибка, 1 - ок
+   эффекты:
+*/
+ 
+ oRes = 0;
+ vInt=111;
+ vReal=112;
+ vStr=110; 
+ vEn=106;
+ vEI=0;
+ select ID_CL,VAR_CONF, TYPE_PROD from PROD
+   where ID_PROD=:pIdProd
+   into :vIdClass,:vVarConf,:vTypeProd;
+ select count(*) from PAR_PROD2
+    where ID_PAR= :pIdPar and ID_PROD=:pIdProd
+    into :vYesPar; 
+  if(:vYesPar>0) then /*есть параметр*/
+    begin
+      oRes=1;
+      select EI_PAR, TYPE_P from PARAMETR1
+        where ID_PAR= :pIdPar
+        into :vEI,:vTypePar;
+      if (:vReal = :vTypePar) then /*вещественный параметр*/ 
+         update PAR_PROD2
+           set VAL_R =:pVal
+           where ID_PROD=:pIdProd and ID_PAR=:pIdPar;
+      else
+        begin
+          select count(*) from  POS_ENUM
+            where ID_POS = :pEnumVal and ID_ENUM = :vTypePar
+            into :vYesEn;  /* параметр перечисления*/
+          if (:vYesEn > 0) then
+            update PAR_PROD2
+              set VAL_ENUM =:pEnumVal
+              where ID_PROD=:pIdProd and ID_PAR=:pIdPar;
+          else  
+            begin
+             if (:vInt = :vTypePar) then /* параметр целочисленный*/
+              update PAR_PROD2
+                set VAL_INT =:pValInt
+                where ID_PROD=:pIdProd and ID_PAR=:pIdPar;
+             else
+               if (:vStr = :vTypePar) then /* параметр строка*/
+                 update PAR_PROD2
+                   set VAL_STR =:pValStr
+                   where ID_PROD=:pIdProd and ID_PAR=:pIdPar;
+            end 
+        end
+    end
+   else
+     oRes=0;
+  suspend;
+end
+/*****************************************************************/
+/*Тестирование процедуры WRITE_PAR_PROD1 */
+select * from WRITE_PAR_PROD1 (
+    107,
+    3,
+    100,
+    null,
+    null,
+    null )
+
+select * from WRITE_PAR_PROD1 (
+    107,
+    1,
+    null,
+    null,
+   2,
+    null )
+
+
+/*****************************************************************/
+/*****************************************************************/
+/*Внесение изменений для указания ограничений на значение параметров в шаблоне и вариантах исполнения (простой вариант)*/
+alter table PAR_PROD1 add MIN_VAL  double precision ;
+alter table PAR_PROD1 add MAX_VAL  double precision ;
+/*****************************************************************/
+/*****************************************************************/
+/*****************************************************************/
+/*Расширение процедуры INS_VAL_ENUM для работы с многими типами значений*/
+create or alter procedure INS_VAL_ENUM (
+    PIDENUM integer,
+    PSHNAME varchar(15),
+    PNAME varchar(150),
+    PRVAL double precision,
+    PINTVAL integer,
+    PPICVAL varchar(50))
+returns (
+    ONEW integer,
+    ONUM integer,
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VIDCLASS integer;
+declare variable VYESSTR integer;
+declare variable VYESINT integer;
+declare variable VYESPIC integer;
+declare variable VYESR integer;
+declare variable vEnStr integer;
+declare variable vEnR integer;
+declare variable vEnInt integer;
+declare variable vEnPic integer;
+
+
+
+begin
+/*функция: Добавляет новое значение pIdEnum 
+  вход:pIdENum - ид. перечисления
+       pShName -  обозначение
+       pName -  имя
+       pRVal - веществ значение
+       pIntVal – целочисл. значение
+       pPicVal – ссылка на рисунок 
+  выход: oNum - порядковый номер значения в списке перечисления
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: */
+
+  oRes=1;
+  vEnStr = 106;
+  vEnR= 108;
+  vEnInt = 109; 
+  vEnPic= 105;
+  vYes=0;
+  vYesStr=0;
+  vYesPic=0;
+  vYesR=0;
+  vYesInt=0; 
+  oNum=0;
+  select OYES from IN_GR(:vEnPic,:pIdEnum)
+     into :vYesPic;
+  if ((:vYesStr >0) or (:vYesPic >0)) then
+    begin
+      select count(*) from POS_ENUM
+        where ID_ENUM=:pIdEnum and ((SHORT_NAME=:pShName or  
+          NAME=:pName)or (:pShName is null) or (:pName is null))
+        into :vYes;
+      if ((:pShName is null) or (:pName is null)) then vYes=1;
+    end
+  select OYES from IN_GR(:vEnR,:pIdEnum)
+     into :vYesR;
+  if((:vYesR >0) and (:pRVal is null)) then vYes=1;
+
+  select OYES from IN_GR(:vEnInt,:pIdEnum)
+     into :vYesInt;
+  if((:vYesInt >0) and (:pIntVal is null)) then vYes=1;
+  if (:vYes=0) then
+    begin
+      select MAX(NUM )from POS_ENUM
+        where ID_ENUM=:pIdEnum
+        into :oNum;
+      if(:oNum is null) then oNum=0;
+      oNum=oNum+1;
+      oRes=1;
+      select oNew from GEN_POS_ENUM
+        into :oNew;
+      insert into POS_ENUM(ID_ENUM,ID_POS,NUM,SHORT_NAME, 
+               NAME,RVAL,INT_VAL,PIC_VAL)
+        values(:pIdEnum,:oNew,:oNum,:pShName,:pName,
+                :pRVal,:pIntVal,:pPicVal); 
+    end
+  else
+    oRes=0;  
+  suspend;
+end
+/*****************************************************************/
+/*****************************************************************/
+/*******************Настройка перечислений  для примера ***********/
+/* Операторы сравнения  */
+select * from INS_CLASS(106, “ОпСр”, “Операторы сравнения”,13);
+/*ID_CLASS= 119*/
+select * from INS_VAL_ENUM(119,'<','<',null,null,null);
+/* ID_POS= 13, NUM=1*/
+select * from INS_VAL_ENUM(119,'<=','<=',null,null,null);
+/* ID_POS= 20, NUM=2*/
+select * from INS_VAL_ENUM(119,'=','=',null,null,null);
+/* ID_POS= 21, NUM=3*/
+select * from INS_VAL_ENUM(119,'>=','>=',null,null,null);
+/* ID_POS= 22, NUM=4*/
+select * from INS_VAL_ENUM(119,'in','in',null,null,null);
+/* ID_POS= 23, NUM=5*/
+select * from INS_VAL_ENUM(119,'>','>',null,null,null);
+/* ID_POS= 22, NUM=4*/
+/*****************************************************************/
+/*********** Арифметические операторы       ********************/
+/*****************************************************************/
+select * from INS_CLASS(106, “ОпАр”, “Операторы арифметические”,12);
+/*ID_CLASS= 120*/
+select * from INS_VAL_ENUM(120,'+','+',null,null,null);
+/* ID_POS= 24, NUM=1*/
+select * from INS_VAL_ENUM(120,'-','-',null,null,null);
+/* ID_POS= 25, NUM=2*/
+select * from INS_VAL_ENUM(120,'*','*',null,null,null);
+/* ID_POS= 26, NUM=3*/
+select * from INS_VAL_ENUM(120,'/','/',null,null,null);
+/* ID_POS= 27, NUM=4*/
+/*****************************************************************/
+/*************** Вариант конфигурации ****************************/
+select * from INS_CLASS(106, “ВарКонф”, “Вариант конфигуратора”,13);
+/*ID_CLASS= 118*/
+select * from INS_VAL_ENUM(118,'БК','Без конфигуратора',null,null,null);
+/* ID_POS= 10, NUM=1*/
+select * from INS_VAL_ENUM(118,'Ш','Шаблон',null,null,null);
+/* ID_POS= 11, NUM=2*/
+select * from INS_VAL_ENUM(118,'ВИ','Вариант исполнения',null,null,null);
+/* ID_POS= 12, NUM=3*/
+/*****************************************************************/
+/*************** Изменения  модели данных зад. 2.3****************/
+/*****************************************************************/
+/*****************************************************************/
+CREATE TABLE PAR_PROD2 (
+    ID_PAR_PROD       INTEGER NOT NULL,
+    ID_PAR        INTEGER NOT NULL,
+    ID_PROD integer not null,
+    VAL_INT    INTEGER,
+    VAL_R      DOUBLE PRECISION,
+    VAL_STR    VARCHAR(150),
+    VAL_ENUM   INTEGER,
+    FLAG_CONF  INTEGER
+);
+ALTER TABLE PAR_PROD2 ADD PRIMARY KEY (ID_PAR_PROD);
+ALTER TABLE PAR_PROD2 ADD FOREIGN KEY (ID_PROD) REFERENCES PROD (ID_PROD);
+ALTER TABLE PAR_PROD2 ADD FOREIGN KEY (ID_PAR) REFERENCES PARAMETR1 (ID_PAR);
+ALTER TABLE PAR_PROD2 ADD FOREIGN KEY (VAL_ENUM) REFERENCES POS_ENUM (ID_POS);
+
+CREATE UNIQUE INDEX PAR_PROD02 ON PAR_PROD2 (ID_PROD, ID_PAR);
+/*****************************************************************/
+CREATE GENERATOR PAR_PROD_GEN;
+
+create procedure GEN_ID_PAR_PROD
+returns (
+    ONEW integer)
+as
+begin
+/*функция: возвращает новый уникальный идентификатор*/
+  oNew=GEN_ID(PAR_PROD_GEN,1); /*вызов генератора*/
+  suspend; 
+end
+
+/*****************************************************************/
+/*****************Расширение классификатора***********************/
+select * from INS_CLASS(32, “Функция”, “Функция”,13);
+/*ID_CLASS= 121*/
+select * from INS_CLASS(121, 'ЛогФ', 'Логическая функция',13);
+/*ID_CLASS= 122*/
+select * from INS_CLASS(121, 'АрФ', 'Арифметическая функция',13);
+/*ID_CLASS= 123*/
+select * from INS_CLASS(122, 'Предикат', Предикат',13);
+/*ID_CLASS= 124*/
+select * from INS_CLASS(122, 'Кон', 'Конъюнкция',13);
+/*ID_CLASS= 125*/
+select * from INS_CLASS(122, 'Диз', 'Дизъюнкция',13);
+/*ID_CLASS= 126*/
+/*****************************************************************/
+/********************Логические операторы*************************/
+select * from INS_CLASS(106, “ОпЛог”, “Операторы логические”,13);
+/*ID_CLASS= 127*/
+select * from INS_VAL_ENUM(127,'OR','ИЛИ',null,null,null);
+/* ID_POS= 28, NUM=1*/
+select * from INS_VAL_ENUM(127,'AND','И',null,null,null);
+/* ID_POS= 29, NUM=2*/
+select * from INS_VAL_ENUM(127,'NOT','НЕ',null,null,null);
+/* ID_POS= 30, NUM=3*/
+/*****************************************************************/
+/**********    Таблицы для работы с ограничениями        *******/
+/*таблица костант*/
+CREATE TABLE CONST (
+    ID_CONST       INTEGER NOT NULL,
+    SH_NAME        VARCHAR(10),
+    NAME        VARCHAR(20),
+    CLASS_CONST integer, 
+    VAL_INT    INTEGER,
+    VAL_R      DOUBLE PRECISION,
+    VAL_STR    VARCHAR(20),
+    ENUM_VAL   INTEGER,
+    NOTE       VARCHAR(30),
+    FLAG_CONF  INTEGER,
+    EI integer
+);
+ALTER TABLE CONST ADD PRIMARY KEY (ID_CONST);
+ALTER TABLE CONST ADD FOREIGN KEY (VAL_ENUM) REFERENCES POS_ENUM (ID_POS);
+ALTER TABLE CONST ADD FOREIGN KEY (EI) REFERENCES EI (ID_EI);
+alter table CONST add CLASS_CONST  integer not null;
+ALTER TABLE CONST ADD FOREIGN KEY (CLASS_CONST) REFERENCES CHEM_CLASS (ID_CLASS);
+ALTER TABLE CONST ALTER ENUM_VAL TO VAL_ENUM;
+ALTER TABLE CONST add val_enum integer
+/*CREATE UNIQUE INDEX PAR_PROD01 ON PAR_PROD2 (ID_PROD, ID_PAR);*/
+/*****************************************************************/
+CREATE GENERATOR CONST_GEN;
+
+create or alter procedure GEN_ID_CONST
+returns (
+    ONEW integer)
+as
+begin
+/*функция: возвращает новый уникальный идентификатор*/
+  oNew=GEN_ID(CONST_GEN,1); /*вызов генератора*/
+  suspend; 
+end
+/*****************************************************************/
+/*****************************************************************/
+/******************Процедуры для CONST  **************************/
+/*****************************************************************/
+create or alter procedure INS_CONST (
+    pClassConst integer,
+    PSHNAME varchar(15),
+    PNAME varchar(150),
+    PRVAL double precision,
+    PINTVAL integer,
+    PStrVAL varchar(50),
+    pEI integer)
+returns (
+    ONEW integer,
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VIDCLASS integer;
+declare variable VYESSTR integer;
+declare variable VYESINT integer;
+declare variable VYESPIC integer;
+declare variable VYESR integer;
+declare variable vEnStr integer;
+declare variable vEnR integer;
+declare variable vEnInt integer;
+declare variable vEnPic integer;
+
+
+
+begin
+/*функция: Добавляет новую константу  
+  вход:
+       pClassConst – класс константы
+       pShName -  обозначение
+       pName -  имя
+       pRVal - веществ значение
+       pIntVal – целочисл. значение
+       pStrVal -  строковое значение 
+  выход: oNew – ид константы
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.	при наличии значений численных параметров и отсутствии ЕИ oRes=0 */
+  oRes=1;
+  vYes=0;
+  if (((:pRVal is not null) or (:pIntVal  is not null))
+          and (:pEI is null))         then oRes=0;
+  if (:oRes =1) then
+    begin
+      select oNew from GEN_ID_CONST
+        into :oNew;
+      insert into CONST(ID_CONST,SH_NAME,NAME,VAL_INT,VAL_R, 
+                            VAL_STR,EI,CLASS_CONST)
+        values(:oNew,:pShName,:pName, :pIntVal, 
+              :pRVal,:pStrVal,:pEI,:pClassConst); 
+    end
+  else
+    oRes=0;  
+  suspend;
+end
+/*****************************************************************/
+/*Тесты для процедуры INS_CONST  */
+select * from INS_CONST (
+    112,
+   null,
+    'Ограничение длины',
+    2000,
+    null,
+    null,
+    1);
+/*****************************************************************/
+/*****************************************************************/
+/*************   Функции      ************************************/
+/*Таблица функций*/
+CREATE TABLE FUN_COMP (
+    ID_FUN   INTEGER NOT NULL,
+    SH_NAME        VARCHAR(10),
+    NAME        VARCHAR(20),
+    CLASS_F    INTEGER,
+    OPER   INTEGER,
+    TYPE_RES integer
+);
+ALTER TABLE FUN_COMP ADD PRIMARY KEY (ID_FUN);
+ALTER TABLE FUN_COMP ADD FOREIGN KEY (OPER) REFERENCES POS_ENUM (ID_POS);
+ALTER TABLE FUN_COMP ADD FOREIGN KEY (TYPE_RES) REFERENCES CHEM_CLASS (ID_CLASS);
+ALTER TABLE FUN_COMP ADD FOREIGN KEY (CLASS_F) REFERENCES CHEM_CLASS (ID_CLASS);
+/*****************************************************************/
+create or alter GENERATOR FUN_COMP_GEN;
+
+create or alter procedure GEN_ID_FUN_COMP
+returns (
+    ONEW integer)
+as
+begin
+/*функция: возвращает новый уникальный идентификатор*/
+  oNew=GEN_ID(FUN_COMP_GEN,1); /*вызов генератора*/
+  suspend; 
+end
+/*****************************************************************/
+/**************** Процедуры для FUN_COMP  ************************/
+/*****************************************************************/
+create or alter procedure INS_FUN_COMP (
+    pClassFun integer,
+    PSHNAME varchar(15),
+    PNAME varchar(30),
+    POper integer,
+    pTypeRes integer)
+returns (
+    ONEW integer,
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VIDCLASS integer;
+declare variable VYESClassFun integer;
+declare variable VYESOperAr integer;
+declare variable VYESOperLog integer;
+declare variable VYESOperPred integer;
+declare variable VYESTypeRes integer;
+declare variable vArF integer;
+declare variable vLogF integer;
+declare variable vPred integer;
+declare variable vBasType integer;
+declare variable vFun integer;
+declare variable vOperAr integer;
+declare variable vOperLog integer;
+declare variable vOperPred integer;
+declare variable vIdEnum integer;
+declare variable vCaseF integer;
+
+begin
+/*функция: Добавляет новую функцию  
+  вход:
+       pClassFun – класс функции,
+    PSHNAME – обозначение функции,
+    PNAME – имя функции,
+    POper – оператор функции,
+    pTypeRes  - тип результата
+выход: oNew – ид константы
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.	при отсутствии значений параметров по oRes=0 */
+
+  oRes=1;
+  vArF=123;
+  vLogF=122;
+  vPred =124;
+  vCaseF = 130; 
+  vFun= 121;
+  vOperAr=120;
+  vOperLog= 127;
+  vOperPred= 119;
+  vBasType=102;
+  vYesClassFun=0;
+  vYesTypeRes=0;
+  vYesOperLog=0;
+  vYesOperAr=0;
+  vYesOperPred = 0;
+  vYes=0;
+    select OYES from IN_GR1(:vFun,:pClassFun)
+     into :vYesClassFun;
+    select OYES from IN_GR1(:vBasType,:pTypeRes)
+     into :vYesTypeRes;
+    if ((:vYesClassFun >0) and (:vYesTypeRes > 0)) then
+      begin
+        select ID_ENUM from POS_ENUM
+          where ID_POS=:pOper 
+          into :vIdEnum;
+        if ((:pClassFun = :vArF) and (:vIdEnum = :vOperAr)
+          or (:pClassFun = :vLogF) and (:vIdEnum = :vOperLog)
+          or (:pClassFun = :vPred) and (:vIdEnum = :vOperPred)
+          or (:pClassFun = :vCaseF) and (:vIdEnum = :vOperLog)) then
+          begin
+            select oNew from GEN_ID_FUN_COMP
+              into :oNew;
+            insert into FUN_COMP(ID_FUN,SH_NAME,NAME,CLASS_F,
+                        OPER,TYPE_RES)
+               values(:oNew,:pShName,:pName, :pClassFun, 
+                    :pOper,:pTypeRes); 
+            oRes = 1;
+          end
+        else
+          oRes=0;  
+      end
+    else    
+      oRes=0;  
+  suspend;
+end
+/*****************************************************************/
+/*Тесты для процедуры INS_FUN_COMP  */
+select * from INS_FUN_COMP (
+    124,    /*pClassFun  Предикат*/
+    'Пр1' ,   /*PSHNAME*/
+    'Ограничение длины', /*PNAME */
+    22,    /*POper   оператор >=*/
+    128)   /*pTypeRes  bool*/
+/*****************************************************************/
+/*****************************************************************/
+/*****************************************************************/
+/* Таблица Список ограничений*/
+CREATE TABLE LIMIT (
+    ID_PROD   INTEGER NOT NULL,
+    ID_FUN_FACT    INTEGER not null);
+ALTER TABLE LIMIT ADD FOREIGN KEY (ID_FUN)FACT) REFERENCES FACT_FUN (ID_FUN_FACT);
+ALTER TABLE LIMIT ADD FOREIGN KEY (ID_PROD) REFERENCES PROD (ID_PROD);
+ALTER TABLE LIMIT ADD PRIMARY KEY (ID_PROD, ID_FUN_FACT);
+/*****************  Процедуры для LIMIT_FUN **********************/
+/*****************************************************************/
+/*Добавить функцию в ограничение*/
+/*****************************************************************/
+/* Проверка ограничений*/
+/*****************************************************************/
+/*****************************************************************/
+/*Ограничения описываем для шаблона, а проверяем для варианта исполнения. Для обеспечения подстановки фактических параметров текущего изделия используем процедуру UPDATE_PAR */
+/*****************************************************************/
+/* Подстановка параметров в аргументы*/
+create or alter procedure UPDATE_PAR(
+       pIdProd integer )
+returns (
+    ORES integer)
+/*****************************************************************/
+/*****************************************************************/
+/*************************************************************/
+/*Все меняем на версию с подстановкой фактических параметров*/
+CREATE TABLE ARG_FUN (
+    ID_FUN    INTEGER NOT NULL,
+    NUM       INTEGER NOT NULL,
+    ID_CLASS  INTEGER,
+    ID_PARAM  INTEGER
+);
+ALTER TABLE ARG_FUN ADD FOREIGN KEY (ID_CLASS) REFERENCES CHEM_CLASS (ID_CLASS);
+ALTER TABLE ARG_FUN ADD FOREIGN KEY (ID_PARAM) REFERENCES PARAMETR1 (ID_PAR);
+/*************************************************************/
+/******************Процедуры для ARG_FUN*************************/
+/*************************************************************/
+/*Добавление аргумента*/
+create or alter procedure INS_ARG_FUN (
+    pIdFun integer,
+    pIdClass integer,
+    pIdPar integer)
+returns (
+    oNum integer,
+    ORES integer)
+as
+declare variable vClConst integer;
+declare variable vClProd integer;
+declare variable vYesParProd integer;
+declare variable vYesCl integer;
+declare variable vYesProd integer;
+
+
+begin
+/*функция: Добавляет новый аргумент для предиката  или ар. функции
+  вход:
+    pIdFun – ид. функции,
+    pIdPar – параметр продукта,
+    pIdClass – класс аргумента
+выход: oNum – номер аргумента в списке
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.	при отсутствии значений параметров по oRes=0 */
+
+  oRes= 0;
+  vYesParProd = 0;
+  vYesProd = 0;
+  vYesCl =  0;
+  vClConst = 129;
+  vClProd = 1;
+  select count(*) from CHEM_CLASS
+    where ID_CLASS = :pIdClass
+    into :vYesCl;
+  if (:vYesCl > 0) then
+    begin
+      select OYES from IN_GR1(:vClProd,:pIdClass)
+                into :vYesProd;
+      select count(*) from PAR_CLASS1 
+        where PAR = :pIdPar and CLASS = :pIdClass
+        into : vYesParProd;
+      if (:vYesProd > 0) and (:vYesParProd > 0) or (:vYesProd =0) then
+        begin
+          oNum=0;
+          select MAX(NUM) from ARG_FUN 
+            where ID_FUN = :pIdFun
+            into :oNum;
+          if(:oNum is null) then oNum=0;
+          oNum = oNum +1;
+          insert into ARG_FUN(ID_FUN,NUM,ID_CLASS, ID_PARAM)
+            values(:pIdFun,:oNum,:pIdClass, :pIdPar); 
+          oRes = 1;
+        end
+      else oRes =0;
+    end
+  else oRes =0;
+  suspend;
+end
+/*************************************************************/
+select * from INS_CLASS(121, 'Константа', 'Константа',13);/*ID_CLASS= 129*/
+/*************************************************************/
+/* Например, 
+h > 100,  h <= 500
+Функция 13(124 Предикат,>: Оператор сравнения) */
+select * from INS_FUN_COMP (
+    124,    /*pClassFun Предикат*/
+    'МинГрh',   /*PSHNAME*/
+    ' МинГрh ', /*PNAME */
+    31,    /*pOper  > */
+    128)   /*pTypeRes bool*/ 
+ /*ID_FUN=13*/
+/*Объявляем параметры*/
+select * from INS_ARG_FUN (
+    13,     /*pIdFun МинГрh */
+    14, /*pIdClass Воздуховоды и…*/
+    3)  /*pIdPar h */
+/*oNum =1, oRes = 1*/
+
+select * from INS_ARG_FUN (
+    13,     /*pIdFun МинГрh */
+    129, /*pIdClass Константа (TypeRes= 112 real)*/
+    null)  /*pIdPar h */
+/*oNum =2, oRes = 1*/
+/*************************************************************/
+/* Исправляем АрФ h/w  7*/
+
+
+
+
+/*************************************************************/
+CREATE TABLE VAR_CALL1 (
+    ID_VAR_CALL   INTEGER NOT NULL,
+     SH_NAME varchar(15),
+     NAME varchar (25));
+ALTER TABLE VAR_CALL1 ADD PRIMARY KEY (ID_VAR_CALL);
+/*ALTER TABLE VAR_CALL1 ADD FOREIGN KEY (ID_FUN) REFERENCES FUN_COMP (ID_FUN);*/
+CREATE GENERATOR VAR_CALL_GEN1;
+
+create or alter procedure GEN_ID_VAR_CALL1
+returns (
+    ONEW integer)
+as
+begin
+/*функция: возвращает новый уникальный идентификатор*/
+  oNew=GEN_ID(VAR_CALL_GEN1,1); /*вызов генератора*/
+  suspend; 
+end
+
+/*****************************************************************/
+create or alter procedure INS_VAR_CALL (
+    PSHNAME varchar(15),
+    PNAME varchar(30))
+returns (
+    ONEW integer,
+    ORES integer)
+as
+begin
+/*функция: Добавляет новыую группу вариантов вызова функций  
+  вход:
+    PSHNAME – обозначение варианта вызова,
+    PNAME – имя варианта вызова,
+выход: oNew – ид варианта вызова
+       oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии функции oRes=0 */
+
+  oRes=1;
+  select oNew from GEN_ID_VAR_CALL1
+    into :oNew;
+  insert into VAR_CALL1(ID_VAR_CALL,SH_NAME,NAME)
+              values(:oNew,:pShName,:pName); 
+  suspend;
+end
+/*************************************************************/
+/*Первый вариант вызова функции 1 Ограничение длины*/
+/*Нужна константа Макс L*/
+select * from INS_CONST (
+    129,  /*PCLASSCONST */
+    ‘МаксL’,/*PSHNAME varchar(15),*/
+    ‘МаксL’, /*PNAME varchar(150),*/
+    1000, /*PRVAL double precision,*/
+    null, /*PINTVAL integer,*/
+    null, /*PSTRVAL varchar(50),*/
+1)	/*PEI integer мм*/
+/*oNew = 4*/
+/*************************************************************/
+/* Вызовы функций*/
+CREATE TABLE FACT_FUN (
+    ID_FUN_FACT    INTEGER NOT NULL,
+    ID_FUN       INTEGER NOT NULL,
+    ID_VAR integer
+);
+ALTER TABLE FACT_FUN ADD PRIMARY KEY (ID_FUN_FACT);
+ALTER TABLE FACT_FUN ADD FOREIGN KEY (ID_FUN) REFERENCES FUN_COMP (ID_FUN);
+ALTER TABLE FACT_FUN ADD FOREIGN KEY (ID_VAR) REFERENCES VAR_CALL1 (ID_VAR_CALL);
+CREATE GENERATOR FACT_FAN_GEN;
+
+create or alter procedure GEN_ID_FUN_FACT
+returns (
+    ONEW integer)
+as
+begin
+/*функция: возвращает новый уникальный идентификатор*/
+  oNew=GEN_ID(FACT_FUN_GEN,1); /*вызов генератора*/
+  suspend; 
+end
+/*************************************************************/
+
+create or alter procedure INS_FACT_FUN (
+    pIdFun integer,
+    pIdVar integer)
+returns (
+    ONEW integer,
+    ORES integer)
+as
+begin
+/*функция: Добавляет новый заголовок варианта вызова функции  
+  вход:
+    pIdFun – ид. функции,
+    pIdVar – ид. группы вариантов вызова
+выход: oNew – ид варианта вызова
+       oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии функции oRes=0 */
+
+  oRes=1;
+  select oNew from GEN_ID_FUN_FACT
+    into :oNew;
+  insert into FACT_FUN(ID_FUN_FACT,ID_FUN,ID_VAR)
+              values(:oNew,:pIdFun,:pIdVar); 
+  suspend;
+end
+/*************************************************************/
+/*Создадим вариант вызова для функции 1 группы 1*/
+select * from INS_FACT_FUN (
+    1, /* предикат 1 Ограничение 1*/
+1) /* Группа 1*/
+/*oNew = 5*/
+/*Создадим вариант вызова для функции 7 h/w группы 1*/
+select * from INS_FACT_FUN (
+    7, /* деление h/w 1*/
+1) /* Группа 1*/
+/*oNew = 6*/
+/*Создадим вариант вызова для функции 8 h/w> группы 1*/
+select * from INS_FACT_FUN (
+    8, /* деление h/w> */
+1) /* Группа 1*/
+/*oNew = 7*/
+/*Создадим вариант вызова для функции 9 h/w< группы 1*/
+select * from INS_FACT_FUN (
+    9, /* деление h/w< */
+1) /* Группа 1*/
+/*oNew = 8*/
+/*Создадим вариант вызова для функции 12 9and 8 группы 1*/
+select * from INS_FACT_FUN (
+    12, /* деление h/w< */
+1) /* Группа 1*/
+/*oNew = 9*/
+/*************************************************************/
+/*************************************************************/
+/*Записываем для всех вызовов фактические параметры*/
+select * from WRITE_FACT_PAR (
+    5,   /*pForFactFun*/
+    1, /*pNum  */
+    15, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst */
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    5,   /*pForFactFun*/
+    2, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    4, /*pFactConst Макс L*/
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    6,   /*pForFactFun*/
+    1, /*pNum  */
+    15, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst */
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    6,   /*pForFactFun*/
+    2, /*pNum  */
+    15, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst */
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    7,   /*pForFactFun*/
+    1, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst Гран. 0.5*/
+    null, /*pFactEnum */
+    6)  /*pFactFun */
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    7,   /*pForFactFun*/
+    2, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    3, /*pFactConst Гран. 0.5*/
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    8,   /*pForFactFun*/
+    1, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst Гран. 0.5*/
+    null, /*pFactEnum */
+    6)  /*pFactFun h/w*/
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    8,   /*pForFactFun*/
+    2, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    2, /*pFactConst Множ.2*/
+    null, /*pFactEnum */
+    null)  /*pFactFun h/w*/
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    9,   /*pForFactFun*/
+    1, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst Множ.2*/
+    null, /*pFactEnum */
+    7)  /*pFactFun h/w*/
+/*oNew = 1*/
+/****************************/
+select * from WRITE_FACT_PAR (
+    9,   /*pForFactFun*/
+    2, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst Множ.2*/
+    null, /*pFactEnum */
+    8)  /*pFactFun h/w*/
+/*oNew = 1*/
+/*************************************************************/
+/*************************************************************/
+CREATE TABLE FACT_PAR (
+    ID_FUN_FACT    INTEGER NOT NULL,
+    NUM       INTEGER NOT NULL,
+    FACT_PROD integer,
+    FACT_CONST integer,
+    FACT_ENUM integer,
+    FACT_FUN1 integer
+);
+ALTER TABLE FACT_PAR ADD PRIMARY KEY (ID_FUN_FACT,NUM);
+ALTER TABLE FACT_PAR ADD FOREIGN KEY (ID_FUN_FACT) REFERENCES FACT_FUN
+(ID_FUN_FACT);
+ALTER TABLE FACT_PAR ADD FOREIGN KEY (FACT_PROD) REFERENCES PROD (ID_PROD);
+ALTER TABLE FACT_PAR ADD FOREIGN KEY (FACT_CONST) REFERENCES CONST (ID_CONST);
+ALTER TABLE FACT_PAR ADD FOREIGN KEY (FACT_FUN1) REFERENCES FACT_FUN
+(ID_FUN_FACT);
+ALTER TABLE FACT_PAR ADD FOREIGN KEY (FACT_ENUM) REFERENCES POS_ENUM (ID_POS);
+/*************************************************************/
+/*************************************************************/
+ALTER TABLE LIMIT ADD FOREIGN KEY (ID_PARAM) REFERENCES PARAMETR1 (ID_PAR);
+/*************************************************************/
+/*************************************************************/
+/* Изменяем пример в соответствии с новой моделью 
+Используем предикаты Гр1 8 и Гр2 9 
+Проверяем выражение 
+   ( h/w > 0.5)AND (h/w < 2), где h = 600, w = 300, h/w = 2
+     Гр1 = 1       Гр2 = 0
+         Усл для h/w = 0
+/*****************************************************************/
+/*  Создаем логическую функцию Усл для h/w   */
+select * from INS_FUN_COMP (
+    122,    /*pClassFun Лог. функция*/
+    'Услh/w',   /*PSHNAME*/
+    'Усл для h/w', /*PNAME */
+    29,    /*pOper  AND */
+    128)   /*pTypeRes bool*/ 
+ /*ID_FUN=12*/
+/*****************************************************************/
+/* Задаем аргументы лог. функции   Усл h/w 12 */
+select * from INS_ARG_LOG_FUN (
+    12,
+    8)
+/*NUM= 1*/
+/* аргумент 2*/
+select * from INS_ARG_LOG_FUN (
+    12,
+    9)
+/*NUM= 1*/
+/*************************************************************/
+
+/*************************************************************/
+create or alter procedure WRITE_FACT_PAR (
+    pForFactFun integer,
+    PNUM integer,
+    PFACTProd integer,
+    pFactConst integer,
+    pFactEnum integer,
+    pFactFun integer)
+returns (
+    ONEW integer,
+    ORES integer)
+as
+declare variable VYESFUN integer;
+declare variable vYesEnum integer;
+declare variable vYesConst integer;
+declare variable vYesProd integer;
+declare variable VYESFACT integer;
+declare variable vProd integer;
+declare variable vConst integer;
+declare variable vEnum integer;
+declare variable vFun integer;
+declare variable vClArg integer;
+declare variable vPar integer;
+declare variable vIdFun integer;
+declare variable vIdVar integer;
+
+begin
+/*функция: задает фактическое значение аргумента для вызова функции
+                 pFunFact 
+  вход:
+       pForFunFact – ид. вызова функции, для которой пишется аргумент
+       pNum – пор. номер аргумента,
+       pFuctProd – ид. фактического параметра продукта.
+       pFuctConst – ид. фактического параметра конст.
+       pFuctEnum – ид. фактического параметра переч.
+       pFuctFun1 – ид. фактического вызова функции.
+
+выход: oNew – ид варианта вызова
+       oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    При отсутствии записи она создается, при наличии – выполняется update  */
+  oRes=1;
+  vProd = 1;
+  vConst = 129;
+  vEnum = 103;
+  vFun = 121;  
+  vYesFun = 0;
+  oNew = 0;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT=:pForFactFun 
+    into :vIdFun, :vIdVar;
+  if (:vIdFun > 0) then vYesFun = 1;
+  select ID_CLASS, ID_PARAM from ARG_FUN
+    where ID_FUN = :vIdFun and NUM = :pNum
+    into :vClArg, :vPar;
+  if (:vYesFun >0) then
+    begin
+      oRes = 1;
+      select count(*) from FACT_PAR
+        where ((ID_FUN_FACT =:pForFactFun)
+         and  (NUM= :pNum)) 
+        into :vYesFact;
+      if (:vYesFact > 0) then   /* выполняем update*/
+        begin
+          select OYES from IN_GR1(:vProd,:vClArg)
+                into :vYesProd;
+          if (:vYesProd > 0) then
+            update FACT_PAR
+              set FACT_PROD = :pFactProd
+              where ((ID_FUN_FACT =:pForFactFun)
+                and  (NUM= :pNum));
+          else
+            if (:vConst= :vClArg) then
+              update FACT_PAR
+                set FACT_CONST = :pFactConst
+                where ((ID_FUN_FACT = :pForFactFun)
+                        and  (NUM= :pNum));
+            else
+              begin
+                select OYES from IN_GR1(:vFun,:vClArg)
+                  into :vYesFun;
+                if (:vYesFun > 0) then
+                  update FACT_PAR
+                   set FACT_FUN1 = :pFactFun
+                   where ((ID_FUN_FACT =:pForFactFun)
+                        and  (NUM= :pNum)); 
+                else
+                  begin
+                    select OYES from IN_GR1(:vENUM,:vClArg)
+                      into :vYesEnum;
+                    if (:vYesEnum > 0) then
+                      update FACT_PAR
+                        set FACT_ENUM = :pFactEnum
+                        where ((ID_FUN_FACT =:pForFactFun)
+                                and  (NUM= :pNum)); 
+                  end
+              end
+        end
+      else       /*выполняем insert*/
+        begin
+          oNew = 1;
+          insert into FACT_PAR(ID_FUN_FACT,NUM,FACT_PROD, 
+                        FACT_CONST,FACT_ENUM, FACT_FUN1)
+               values(:pForFactFun,:pNum,:pFactProd,  
+                          :pFactConst,:pFactEnum, :pFactFun);
+        end
+    end
+  else       oRes=0;  
+  suspend;
+end
+/*************************************************************/
+/*************************************************************/
+/*Создание варианта вызова */
+elect * from INS_VAR_CALL (
+    'ТестыВИ',
+'Тесты ВИ Воздух'); 
+/*oNew = 1*/
+/****************************************************************/
+/*Cоздание вызовов заголовков вызовов функций*/
+/*****************************************************************/
+/*Запишем фактические параметры для функции-предиката 1 ОграничениеL
+для типового изделия (шаблона)*/
+select * from WRITE_FACT_PAR (
+    1, /*PVARCALL первый вариант*/
+    1,  /*PIDFUN ОграничениеL предикат*/
+    1, /*PNUM */
+    15);  /*PFACTOB Типовое изделие*/
+/**/
+/*************************************************************/
+/*************************************************************/
+create or alter procedure CALC_PRED(
+         pIdFactFun integer)
+returns (
+    oValFun integer,
+    oValArg1 double precision,
+    oValArg2 double precision,
+    oShName varchar(25),
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VOPER integer;
+declare variable VOPM integer;
+declare variable VOPMR integer;
+declare variable VOPR integer;
+declare variable VOPB integer;
+declare variable VOPBR integer;
+declare variable VB integer;
+declare variable VOPIN integer;
+declare variable VINT integer;
+declare variable VR integer;
+declare variable VBOOL integer;
+declare variable VENUM integer;
+declare variable VYESENUM integer;
+declare variable VIdPAR integer;
+declare variable VTYPEP integer;
+declare variable vClFun integer;
+declare variable vArFun integer;
+declare variable vPred integer;
+declare variable vConst integer;
+declare variable vNum integer;
+declare variable  vFactFunArg integer;
+declare variable  vClProd integer;
+declare variable  vClArg integer;
+declare variable  vFactFun integer;
+declare variable  vFactEnum integer;
+declare variable  vFactConst integer;
+declare variable  vFactProd integer;
+declare variable  vYesProd integer;
+declare variable  vIdFun integer;
+declare variable  vIdVar integer;
+declare variable VVALARG double precision;
+declare variable VVALARG1 double precision;
+declare variable VVALARG2 double precision;
+begin
+/*функция: Вычисляет значение предиката  для варианта вызова pIdFactFun
+  вход:
+    pIdFactFun – ид. вызова предиката,
+выход: oValFun – результат 0 – false, 1 – true, null -ошибка
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений параметров  oRes=0 
+******************************************************************/
+  vOpM=13;
+  vOpMR= 20;
+  vOpR= 21;
+  vOpBR = 22;
+  vOpB = 31;
+  vOpIN = 23;
+  vInt= 111;
+  vR = 112;
+  vBool=128;
+  vNum=0;
+  vConst=129;
+  vPred= 124;
+  vOper=0;
+  vEnum = 103;
+  vArFun = 123;
+  vClProd = 1;
+  oRes=1;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT = :pIdFactFun
+    into :vIdFun, :vIdVar;
+  select OPER, SH_NAME, CLASS_F from FUN_COMP
+    where ID_FUN=:vIdFun
+    into :vOper,:oShName, :vClFun; 
+  /*находим значения параметров*/
+  for select FACT_PROD,FACT_CONST,FACT_ENUM,FACT_FUN1, 
+                                  NUM from FACT_PAR
+        where ID_FUN_FACT = :pIdFactFun 
+        into :vFactProd,:vFactConst, :vFactEnum, :vFactFun,:vNum
+  do
+    begin 
+  /*прочитать значение аргумента*/
+    select ID_CLASS, ID_PARAM from ARG_FUN
+      where ID_FUN = :vIdFun and NUM = :vNum
+      into :vClArg, :vIdPar;
+    if (:vClArg = :vArFun) then /*вычислять значение ар. функции*/
+      begin
+      /*найти вариант подстановки*/
+        select FACT_FUN1 from FACT_PAR
+          where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+          into :vFactFunArg; 
+        select oValFun, :oRes from CALC_AR_FUN(:vFactFunArg)
+            into :vValArg, :oRes;
+      end
+    else
+      if (:vClArg = :vConst)then
+        begin
+          select CLASS_CONST from CONST
+            where ID_CONST = :vFactConst
+            into :vClConst; 
+          if (:vClConst = :vR) then
+            select VAL_R from CONST
+              where ID_CONST=:vFactConst
+              into :vValArg;
+          else
+            if (:vClConst = :vR) then
+              begin
+                select OYES from IN_GR1(:vClEnum,:vClArg)
+                  into :vYesEnum;
+                select VAL_ENUM from CONST
+                  where ID_CONST=:vFactConst
+                  into :vValArg;
+              end
+        end  
+      else
+        begin
+          select OYES from IN_GR1(:vClProd,:vClArg)
+            into :vYesProd;
+          if (:vYesProd > 0) then
+            begin
+              select TYPE_P from PARAMETR1
+                where ID_PAR = :vIdPar
+                into :vTypeP;
+              if (:vTypeP = :vR) then  /*для вещ. значения параметра*/
+                select VAL_R from PAR_PROD2
+                  where ID_PROD =:vFactProd and ID_PAR = :vIdPar
+                  into :vValArg;
+               else
+                 begin  /*для параметра-перечисления*/
+                   select OYES from IN_GR1(:vEnum,:vTypeP)
+                   into :vYesEnum;
+                   if (:vYesEnum>0) then 
+                     select VAL_ENUM from PAR_PROD2
+                       where ID_PAR=:vIdPar and ID_PROD = :vFactProd
+                       into :vValArg; /*только ид. значения*/
+                 end
+            end
+        end 
+    if(:vNum =1) then  vValArg1 = vValArg;
+    else  vValArg2 = vValArg;
+  end /*конец цикла*/
+if ((:vValArg1 is not null) and (:vValArg2 is not null)) then
+  begin
+    if (:vOper  = :vOpM) then
+      begin
+        if (:vValArg1 < :vValArg2) then   oValFun = 1;
+        else oValFun = 0; 
+      end
+     else
+       if (:vOper  = :vOpMR) then
+         begin
+           if (:vValArg1 <= :vValArg2) then   oValFun = 1;
+           else oValFun = 0; 
+         end
+       else
+         if (:vOper  = :vOpR) then
+           begin
+             if (:vValArg1 = :vValArg2) then   oValFun = 1;
+             else oValFun = 0; 
+           end
+         else
+           if (:vOper  = :vOpBR) then
+             begin
+               if (:vValArg1 >= :vValArg2) then   oValFun = 1;
+               else oValFun = 0; 
+             end
+           else
+             if (:vOper  = :vOpB) then
+               begin
+                 if (:vValArg1 > :vValArg2) then   oValFun = 1;
+                 else oValFun = 0; 
+               end
+    oValArg1=vValArg1;
+    oValArg2=vValArg2;
+  end
+ else
+   begin
+     oRes=0;
+     oValFun = null;
+   end
+  suspend;
+end    /*****************************************************************/
+/*****************************************************************/
+/**************   Вычисление арифметической функции  *************/
+/*****************************************************************/
+/*Заготовка для новой версии*/
+create or alter procedure CALC_AR_FUN (
+         pIdFactFun integer)
+returns (
+    oValFun double precision,
+    oValArg1 double precision,
+    oValArg2 double precision,
+    oShName varchar(15),
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VARGF integer;
+declare variable VARGPARPROD integer;
+declare variable VARGCONST integer;
+declare variable VARGPOSENUM integer;
+declare variable VOPER integer;
+declare variable VOPSum integer;
+declare variable VOPMin integer;
+declare variable VOpDiv integer;
+declare variable VOPMult integer;
+declare variable VINT integer;
+declare variable VR integer;
+declare variable VCLCONST integer;
+declare variable VENUM integer;
+declare variable VYESENUM integer;
+declare variable VPAR integer;
+declare variable vClFun integer;
+declare variable vArFun integer;
+declare variable vConst integer;
+declare variable vNum integer;
+declare variable  vFactFunArg integer;
+declare variable  vClArgFun integer;
+declare variable  vClArFun integer;
+declare variable  vFactProd integer;
+declare variable  vFactConst integer;
+declare variable  vFactEnum integer;
+declare variable  vFactFun integer;
+declare variable  vIdPar integer;
+declare variable  vClArg integer;
+declare variable  vProd integer;
+declare variable  vClProd integer;
+declare variable  vYesProd integer;
+declare variable  vTypeP integer;
+declare variable  vIdFun integer;
+declare variable  vIdVar integer;
+declare variable VVALARG double precision;
+declare variable VVALARG1 double precision;
+declare variable VVALARG2 double precision;
+begin
+/*функция: Вычисляет значение предиката  для варианта вызова
+               pIdFactFun
+  вход:
+    pIdFactFun – ид. вызова предиката,
+выход: oValFun – результат 0 – false, 1 – true, null -ошибка
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений параметров  oRes=0 
+******************************************************************/
+  vInt= 111;
+  vR = 112;
+  vNum=0;
+  vArFun=123;
+  vConst=129;
+  vOper=0;
+  vEnum = 103;
+  vClProd = 1;
+  vClArFun = 123;
+  vOpSum = 24;
+  vOpMin = 25;
+  vOpMult =26;
+  vOpDiv =27;
+  oRes=1;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT = :pIdFactFun
+    into :vIdFun, :vIdVar;
+  select OPER, SH_NAME, CLASS_F from FUN_COMP
+    where ID_FUN=:vIdFun
+    into :vOper,:oShName, :vClFun; 
+  /*находим значения параметров*/
+  for select FACT_PROD,FACT_CONST,FACT_ENUM,
+                              FACT_FUN1,NUM from FACT_PAR
+        where ID_FUN_FACT = :pIdFactFun 
+        into :vFactProd,:vFactConst, :vFactEnum, :vFactFun,:vNum
+  do
+    begin 
+  /*прочитать значение аргумента*/
+      select ID_CLASS, ID_PARAM from ARG_FUN
+        where ID_FUN = :vIdFun and NUM = :vNum
+        into :vClArg, :vIdPar;
+      if (:vClArg = :vArFun) then /*вычислять значение ар. функции*/
+        begin
+      /*найти вариант подстановки*/
+          select FACT_FUN1 from FACT_PAR
+            where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+            into :vFactFunArg; 
+          select oValFun, :oRes from CALC_AR_FUN(:vFactFunArg)
+            into :vValArg, :oRes;
+        end
+      else
+        if (:vClArg = :vConst)then
+          begin
+            select VAL_R from CONST
+              where ID_CONST=:vFactConst
+              into :vValArg;
+          end  
+        else
+          begin
+            select OYES from IN_GR1(:vClProd,:vClArg)
+              into :vYesProd;
+            if (:vYesProd > 0) then
+              begin
+                select TYPE_P from PARAMETR1
+                  where ID_PAR = :vIdPar
+                  into :vTypeP;
+                if (:vTypeP = :vR) then  /*для вещ. значения 
+                                                 параметра*/
+                  select VAL_R from PAR_PROD2
+                    where ID_PROD =:vFactProd and ID_PAR = :vIdPar
+                    into :vValArg;
+                 else
+                   begin  /*для параметра-перечисления*/
+                     select OYES from IN_GR1(:vEnum,:vTypeP)
+                       into :vYesEnum;
+                     if (:vYesEnum > 0) then 
+                       select VAL_ENUM from PAR_PROD2
+                         where ID_PAR=:vPar and ID_PROD = :vFactProd
+                         into :vValArg; /*только ид. значения*/
+                   end
+              end
+          end 
+      if(:vNum =1) then 
+        begin
+         oValArg1=vValArg;
+         oValFun = vValArg;
+        end
+      else
+        begin
+          oValArg2 = vValArg;  
+          if (:vValArg is not null) then
+            begin
+              if (:vOper  = :vOpSum) then oValFun = oValFun + vValArg;
+              else
+                if (:vOper  = :vOpMin) then oValFun = oValFun -
+                                                vValArg;
+                else
+                  if (:vOper  = :vOpMult) then oValFun = 
+                                  oValFun * vValArg;
+                  else
+                    if (:vOper  = :vOpDiv) then  
+                          oValFun = oValFun/vValArg;
+                    else 
+                      begin
+                        oRes=0;
+                        oValFun = null;
+                      end
+            end
+          else
+            begin
+              oRes=0;
+              oValFun = null;
+            end
+        end
+    end /*конец цикла*/
+  suspend;
+end
+/*****************************************************************/
+/*****************************************************************/
+/*****************************************************************/
+create or alter procedure UPDATE_PROD_FACT(
+  pIdProd integer, pUpdateProd integer)
+returns (oRes integer)
+as
+declare variable vId integer;
+
+begin
+/* функция: заменяет в FACT_PAR pIdProd на pUpdateProd 
+   вход: pIdProd – заменяемый продукт 
+         pUpdateProd – продукт на замену 
+   выход: oRes – 0 – ошибка, 1 – операция выполнена
+   эффекты:    */
+
+  for select p1.ID_FUN_FACT from FACT_PAR p1
+    where FACT_PROD = :pIdProd
+    into :vId
+  do
+    begin
+     update FACT_PAR p2
+       set p2.FACT_PROD = :pUpDateProd
+       where p2.ID_FUN_FACT = :vId;
+    end
+  oRes = 1;
+  suspend;
+end
+/*************************************************************/
+/* заменим типовое изделие 15 на вариант исполнения 107*/
+select * from UPDATE_PROD_FACT(
+  15, 107);
+/* тест для деления h/w*/
+select * from CALC_AR_FUN (
+         6) /*   pIdFactFun h/w для вар. исполнения 107*/
+/* тест для предиката  h/w > 0.5*/
+select * from CALC_PRED (
+         7) /*   pIdFactFun h/w > 0.5 для вар. исполнения 107*/
+/*oValFun = 1, Arg1 = 3 >, Arg2 = 0.5*/
+/* тест для предиката  h/w < 2*/
+select * from CALC_Pred (
+         8) /*   pIdFactFun h/w < 2 для вар. исполнения 107*/
+/*oValFun = 0, Arg1 = 3 <, Arg2 = 2*/
+
+/**************   Вычисление значения лог. функции     ***********/
+/*****************************************************************/
+create or alter procedure CALC_LOG_FUN (
+    pIdFactFun integer)
+returns (
+    oShName varchar(15),
+    oValFun integer,
+    oValArg1 integer,
+    oValArg2 integer,
+    ORES integer)
+as
+declare variable VARGF integer;
+declare variable VOPER integer;
+declare variable VOPOR integer;
+declare variable VOPAND integer;
+declare variable VOpNOT integer;
+declare variable vClFun integer;
+declare variable vNum integer;
+declare variable  vFactFunArg integer;
+declare variable  vClArgFun integer;
+declare variable  vFactFun integer;
+declare variable  vLogFun integer;
+declare variable  vClArg integer;
+declare variable  vPred integer;
+declare variable  vIdFun integer;
+declare variable  vIdVar integer;
+declare variable VVALARG integer;
+begin
+/*функция: Вычисляет значение логической функции для варианта вызова pIdFactFun
+  вход:
+    pIdFactFun – ид. вызова лог. функции
+выход: oValFun – результат 0 – false, 1 – true, null -ошибка
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений входных параметров  oRes=0 
+******************************************************************/
+  vNum=0;
+  vOper=0;
+  vOpOR = 28;
+  vOpAND = 29;
+  vOpNOT = 30;
+  vPred = 124;
+  vLogFun = 127;
+  oRes=1;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT = :pIdFactFun
+    into :vIdFun, :vIdVar;
+  select OPER, SH_NAME, CLASS_F from FUN_COMP
+    where ID_FUN=:vIdFun
+    into :vOper,:oShName, :vClFun; 
+  /*находим значения параметров*/
+  for select FACT_FUN1,NUM from FACT_PAR
+        where ID_FUN_FACT = :pIdFactFun 
+        into  :vFactFun,:vNum
+  do
+    begin 
+  /*прочитать значение аргумента*/
+      select ID_CLASS from ARG_FUN
+        where ID_FUN = :vIdFun and NUM = :vNum
+        into :vClArg;
+      if (:vClArg = :vPred) then /*вычислять значение предиката*/
+        begin
+      /*найти вариант подстановки*/
+          select FACT_FUN1 from FACT_PAR
+            where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+            into :vFactFunArg; 
+          select oValFun, :oRes from CALC_PRED(:vFactFunArg)
+            into :vValArg, :oRes;
+        end
+      else
+        if (:vClArg = :vLogFun)then
+          begin
+      /*найти вариант подстановки*/
+            select FACT_FUN1 from FACT_PAR
+              where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+              into :vFactFunArg; 
+            select oValFun, oRes from CALC_LOG_FUN(:vFactFunArg)
+            into :vValArg, :oRes;
+          end
+      if(:vNum =1) then 
+        begin
+          oValFun = vValArg;
+          oValArg1 = vValArg;
+        end
+      else
+        begin
+          if (:vValArg is not null) then
+            begin
+              oValArg2 = vValArg;
+              if ((:vOper  = :vOpOR) and (:vValArg = 1)) then 
+                oValFun = 1;
+              else
+                if ((:vOper  = :vOpAND) and (:vValArg = 0))  then 
+                    oValFun = 0;
+                else
+                  if (:vOper  = :vOpNOT) then 
+                    if (:vValArg = 0) then oValFun = 1;
+                    else oValFun = 0;
+            end
+          else
+            begin
+              oRes = 0;
+              oValFun = null;
+            end
+        end
+    end /*конец цикла по аргументам*/
+  suspend;
+end    /*****************************************************************/
+/*Тест для логической функции  (h/w < 0.5) and (h/w > 2)*/
+select * from CALC_LOG_FUN (
+    9)  /*pIdFactFun для вызова 9 лог. функции12)*/
+/*oShName Услh/w oValFun = 0, oRes = 1*/
+/*****************************************************************//*****************************************************************/
+/*****************************************************************//*************      Поддержка CASE        ************************/
+/*Расширение для поддержки if then else 
+if (ТС = 2) then (L > 1000)
+ 2 - соединение на фланцах L - длина*/
+/* Добавим оператор CASE  в список логических операторов ?*/
+select * from INS_VAL_ENUM(127,'CASE','CASE',null,null,null);
+/* ID_POS= 32, NUM=4*/
+/* Добавим функцию Выбор  в список в классификатор Функций*/
+select * from INS_CLASS(121, “Выбор”, “Функция”,13);
+/*ID_CLASS= 130*/
+/*************************************************************/
+/*Создаем Правило для соединения */
+select * from INS_FUN_COMP (
+    130,    /*pClassFun Выбор*/
+    'Выбор Соед',   /*PSHNAME*/
+    'Выбор соединения', /*PNAME */
+    32,    /*pOper  AND */
+    128)   /*pTypeRes bool*/ 
+ /*ID_FUN=14*/
+/*************************************************************/
+/*Добавляем константу*/
+select * from INS_CONST (
+    114, /*pClassConst тип соединения */
+    ‘СФ’, /* PSHNAME */
+    ‘СФ’, /*PNAME */
+    null, /*PRVAL */
+    2, /*PINTVAL Соединение на фланцах */
+    null, /*PStr */
+    13) /*pEI */
+/* ID_CONST = 5*/
+/*Используем константу ГР1000мм ID_CONST = 4*/
+/*Добавляем два предиката:
+ПрТС,    ГрL*/
+select * from INS_FUN_COMP (
+    124,    /*pClassFun Предикат*/
+    'ПрТС',   /*PSHNAME*/
+    'Гр Варианта соед.', /*PNAME */
+    21,    /*pOper  = */
+    128)   /*pTypeRes bool*/ 
+ /*ID_FUN=15*/
+select * from INS_FUN_COMP (
+    124,    /*pClassFun Предикат*/
+    'ГрL',   /*PSHNAME*/
+    'ГрL', /*PNAME */
+    31,    /*pOper  > */
+    128)   /*pTypeRes bool*/ 
+ /*ID_FUN=17*/
+/*Объявляем параметры для новых функций*/
+/* ТС для 15*/
+select * from INS_ARG_FUN (
+    15,     /*pIdFun ПрТС */
+    14, /*pIdClass Воздуховоды и…*/
+    1)  /*pIdPar ТС Тип соединения */
+/*oNum =1, oRes = 1*/
+/* Конст ТС для 15*/
+select * from INS_ARG_FUN (
+    15,     /*pIdFun ПрТС */
+    129, /*pIdClass Константа */
+    null)  /*pIdPar ТС Тип соединения */
+/*oNum =2, oRes = 1*/
+
+/* L для 17*/
+select * from INS_ARG_FUN (
+    17,     /*pIdFun ПрТС */
+    14, /*pIdClass Воздуховоды */
+    6)  /*pIdPar L */
+/*oNum = 1, oRes = 1*/
+/* Конст. ГР1000мм  для 17*/
+select * from INS_ARG_FUN (
+    17,     /*pIdFun ПрТС */
+    129, /*pIdClass Константа */
+    null)  /*pIdPar  */
+/*oNum = 2, oRes = 1*/
+/*Для функции 14 Выбор соединения*/
+/* ПрТС */
+select * from INS_ARG_FUN (
+    14,     /*pIdFun Выбор соед. */
+    124, /*pIdClass Предикат */
+    null)  /*pIdPar  */
+/*oNum = 1, oRes = 1*/
+/* ГрL для 14 Выбор */
+select * from INS_ARG_FUN (
+    14,     /*pIdFun Выбор соед. */
+    124, /*pIdClass Предикат */
+    null)  /*pIdPar  */
+/*oNum = 2, oRes = 1*/
+/****************************************************************/
+/* Объявление вызовов*/
+/*Для15 ПрТС*/
+select * from INS_FACT_FUN (
+    15, /* предикат ПрТС */
+1) /* Группа 1*/
+/*oNew = 10*/
+/*Для17 ГрL*/
+select * from INS_FACT_FUN (
+    17, /* предикат ГрL */
+1) /* Группа 1*/
+/*oNew = 11*/
+/*Для14 Выбор соед*/
+select * from INS_FACT_FUN (
+    14, /* Выбор соед */
+1) /* Группа 1*/
+/*oNew = 12*/
+/****************************************************************/
+/* Задание фактических параметров для вызовов*/
+/*Для15 ПрТС*/
+/*Записываем для всех вызовов фактические параметры*/
+/* Для вызова 12 функции 14*/
+select * from WRITE_FACT_PAR (
+    12,   /*pForFactFun*/
+    1, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst */
+    null, /*pFactEnum */
+    10)  /*pFactFun */
+/*oNew = 1*/
+select * from WRITE_FACT_PAR (
+    12,   /*pForFactFun*/
+    2, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst */
+    null, /*pFactEnum */
+    11)  /*pFactFun */
+/*oNew = 2*/
+
+/* Для вызова 10 функции 15*/
+select * from WRITE_FACT_PAR (
+    10,   /*pForFactFun*/
+    1, /*pNum  */
+    15, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst */
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 1*/
+select * from WRITE_FACT_PAR (
+    10,   /*pForFactFun*/
+    2, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    5, /*pFactConst */
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 2*/
+
+/* Для вызова 11 функции 17*/
+select * from WRITE_FACT_PAR (
+    11,   /*pForFactFun*/
+    1, /*pNum  */
+    15, /*  PFACTProd Типовое изделие 15*/
+    null, /*pFactConst */
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 1*/
+select * from WRITE_FACT_PAR (
+    11,   /*pForFactFun*/
+    2, /*pNum  */
+    null, /*  PFACTProd Типовое изделие 15*/
+    4, /*pFactConst */
+    null, /*pFactEnum */
+    null)  /*pFactFun */
+/*oNew = 2*/
+/****************************************************************/
+/****************************************************************/
+
+/* процедура вычисления функции выбора*/
+create or alter procedure CALC_CASE (
+    PIDFACTFUN integer)
+returns (
+    OVALFUN integer,
+    OVALARG1 double precision,
+    OVALARG2 double precision,
+    OVALARG3 double precision,
+    OSHNAME varchar(25),
+    ORES integer)
+as
+declare variable VYES integer;
+declare variable VOPER integer;
+declare variable VCLFUN integer;
+declare variable VARFUN integer;
+declare variable VPRED integer;
+declare variable vLogFun integer;
+declare variable vCase integer;
+
+
+declare variable VNUM integer;
+declare variable VFACTFUNARG integer;
+declare variable VCLARG integer;
+declare variable VFACTFUN integer;
+declare variable VIDFUN integer;
+declare variable VIDVAR integer;
+declare variable VIDPAR integer;
+
+declare variable vOpCase integer;
+declare variable vYesArg integer;
+
+declare variable VVALARG double precision;
+declare variable VVALARG1 double precision;
+declare variable VVALARG2 double precision;
+declare variable VVALARG3 double precision;
+
+begin
+/*функция: Вычисляет значение функции по выбору if для вызова pIdFactFun
+  вход:
+    pIdFactFun – ид. вызова функции Case,
+выход: oValFun – результат 0 – false, 1 – true, null -ошибка
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений параметров  oRes=0 
+******************************************************************/
+  vOpCase = 32;
+  vNum=0;
+  vPred= 124;
+  vCase = 130;
+  vOper=0;
+  vArFun = 123;
+  vLogFun = 122;
+  oRes=1;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT = :pIdFactFun
+    into :vIdFun, :vIdVar;
+  select OPER, SH_NAME, CLASS_F from FUN_COMP
+    where ID_FUN=:vIdFun
+    into :vOper,:oShName, :vClFun; 
+  /*находим значения параметров*/
+  for select FACT_FUN1,NUM from FACT_PAR
+        where ID_FUN_FACT = :pIdFactFun 
+        into :vFactFun,:vNum
+  do
+    begin 
+  /*прочитать значение аргумента*/
+      select ID_CLASS, ID_PARAM from ARG_FUN
+        where ID_FUN = :vIdFun and NUM = :vNum
+        into :vClArg, :vIdPar;
+      if (:vClArg = :vArFun) then /*вычислять значение ар. функции*/
+        begin
+      /*найти вариант подстановки*/
+          select FACT_FUN1 from FACT_PAR
+            where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+            into :vFactFunArg; 
+          select oValFun, :oRes from CALC_AR_FUN(:vFactFunArg)
+            into :vValArg, :oRes;
+        end
+      else
+        if (:vClArg = :vPred) then /*вычислять значение предиката*/
+          begin
+      /*найти вариант подстановки*/
+            select FACT_FUN1 from FACT_PAR
+              where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+              into :vFactFunArg; 
+            select oValFun, oRes from CALC_PRED(:vFactFunArg)
+              into :vValArg, :oRes;
+          end
+        else
+          if (:vClArg = :vLogFun) then /*вычислять значение лог.функции*/
+            begin
+      /*найти вариант подстановки*/
+              select FACT_FUN1 from FACT_PAR
+                where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+                into :vFactFunArg; 
+              select oValFun, oRes from CALC_LOG_FUN(:vFactFunArg)
+                into :vValArg, :oRes;
+            end
+          if (:vClArg = :vCase) then /*вычислять значение Case*/
+            begin
+      /*найти вариант подстановки*/
+              select FACT_FUN1 from FACT_PAR
+                where ID_FUN_FACT = :pIdFactFun and NUM = :vNum
+                into :vFactFunArg; 
+              select oValFun, oRes from CALC_CASE(:vFactFunArg)
+                into :vValArg, :oRes;
+            end
+      if(:vNum =1) then  vValArg1 = vValArg;
+      else  
+        if (:vNum =2) then vValArg2 = vValArg;
+        else  vValArg3 = vValArg;
+    end /*конец цикла*/
+  if ((:vValArg1 is not null) and (:vValArg2 is not null))
+      then vYesArg = 1;
+  if (:vNum = 3) then 
+    if ((:vValArg3 is not null) and (:vYesArg =1)) then  
+      vYesArg =1;
+    else vYesArg = 0;
+   if (:vYesArg > 0) then
+    begin
+      if (:vValArg1 = 1) then oValFun = vValArg2; 
+      else 
+        if (:vNum = 3) then oValFun = vValArg3;
+        else oValFun = 0;
+      oValArg1=vValArg1;
+      oValArg2=vValArg2;
+      oValArg3=vValArg3;
+    end
+  else
+    begin
+      oRes=0;
+      oValFun = null;
+    end
+  suspend;
+end
+/***************************************************************/
+/*Вычисление Case Выбор соединения вызов 12*/
+/* Предвариательно поменяем продускт 15 на 107*/
+/* заменим типовое изделие 15 на вариант исполнения 107*/
+select * from UPDATE_PROD_FACT(
+  15, 107);
+/*oRes = 1*/
+select * from CALC_CASE (
+    12)  /*PIDFACTFUN */
+/***************************************************************/
+/***************************************************************/
+
+create or alter procedure CALC_FUN (
+    PIDFACTFUN integer)
+returns (
+    OVALFUN integer,
+    OVALARG1 double precision,
+    OVALARG2 double precision,
+    OVALARG3 double precision,
+    OSHNAME varchar(25),
+    ORES integer)
+as
+declare variable VCLFUN integer;
+declare variable VARFUN integer;
+declare variable VPRED integer;
+declare variable vLogFun integer;
+declare variable vCase integer;
+
+
+declare variable VNUM integer;
+declare variable VFACTFUNARG integer;
+declare variable VIDFUN integer;
+declare variable VIDVAR integer;
+begin
+/*функция: Вычисляет значение функции по для вызова pIdFactFun
+  вход:
+    pIdFactFun – ид. вызова функции ,
+выход: oValFun – результат 0 – false, 1 – true, null -ошибка
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии значений параметров  oRes=0 
+******************************************************************/
+  vNum=0;
+  vPred= 124;
+  vCase = 130;
+  vArFun = 123;
+  vLogFun = 122;
+  oRes=1;
+  select ID_FUN,ID_VAR from FACT_FUN
+    where ID_FUN_FACT = :pIdFactFun
+    into :vIdFun, :vIdVar;
+  select SH_NAME, CLASS_F from FUN_COMP
+    where ID_FUN=:vIdFun
+    into :oShName, :vClFun; 
+  if (:vClFun = :vPred) then
+    select oValFun, oValArg1,oValArg2,oRes 
+                  from CALC_PRED(:pIdFactFun)
+      into :oValFun, :oValArg1,:oValArg2,:oRes;
+    if (:VClFun = :vArFun) then
+      select oValFun, oValArg1,oValArg2,:oRes
+                 from CALC_AR_FUN(:pIdFactFun)
+        into :oValFun,:oValArg1,:oValArg2, :oRes;
+      if (:vClFun = :vLogFun) then 
+        select oValFun,oValArg1,oValArg2, oRes 
+                   from CALC_LOG_FUN(:pIdFactFun)
+          into :oValFun, :oValArg1,:oValArg2,:oRes;
+        if (:vClFun = :vCase) then 
+          select oValFun,oValArg1,oValArg2,oValArg3, oRes 
+                    from CALC_CASE(:pIdFactFun)
+            into :oValFun,:oValArg1, :oValArg2, :oValArg3, :oRes;
+  suspend;
+end
+/*****************************************************************/
+/*****************************************************************/
+create or alter procedure CHEK_LIMIT (
+    PIDPROD integer)
+returns (
+    OSHNAME varchar(15),
+    OVALFUN integer,
+    OVALARG1 double precision,
+    OVALARG2 double precision,
+    OVALARG3 double precision,
+    ORES integer)
+as
+declare variable VNUM integer;
+declare variable VCLFUN integer;
+declare variable VIDFACTFUN integer;
+declare variable VCONFVI integer;
+declare variable VCONFTI integer;
+declare variable VNOTCONF integer;
+declare variable VCONF integer;
+declare variable VTYPEPROD integer;
+declare variable VIDFUN integer;
+begin
+/*функция: Вычисляет значение логических функций из списка ограничений  
+  вход:
+    pIdProd – ид. изделия,
+выход: oValLog – значение лог. выражения
+       oShName – обозначение функции
+         oRes - 0- операция не выполнена, 1 - операция выполнена успешно
+  эффекты: 
+1.    при отсутствии ограничений oValLog = 1  oRes=1 
+требования: pIdProd – только варианнт исполнения (VAR_CONF = 12)
+******************************************************************/
+  vNum=0;
+  oValFun=0;
+  vConfVI = 12;
+  vConfTI = 11;
+  vNotConf = 10;
+  vConf = 0; 
+  oRes= 0;
+  select TYPE_PROD,CONF_VAR from PROD
+    where ID_PROD = :pIdProd
+    into :vTypeProd, :vConf;
+  if ((:vConf = :vConfVI) and (:vTypeProd is not null)) then
+    begin
+      select oRes from UPDATE_PROD_FACT (:vTypeProd, :PIDPROD)
+        into :oRes;
+      for select ID_FUN_FACT from LIMIT
+            where ID_PROD = :vTypeProd
+            into :vIdFactFun   do
+        begin 
+          select ID_FUN from FACT_FUN
+            where ID_FUN_FACT = :vIdFactFun
+            into :vIdFun;
+          select SH_NAME,CLASS_F from FUN_COMP
+            where ID_FUN=:vIdFun
+            into :oShName,:vClFun; 
+         if ((:vIdFun >0)and (:vClFun>0)) then /*вычислять значение*/
+           begin
+             select oValFun, oValArg1,oValArg2, oValArg3, oRes
+                  from CALC_FUN(:vIdFactFun)
+               into  :oValFun, :oValArg1,:oValArg2,:oValArg3, :oRes;
+             suspend;
+           end  
+        end /*конец цикла по аргументам*/
+      select oRes from UPDATE_PROD_FACT(:pIdProd, :vTypeProd)
+        into :oRes;
+    end
+  else
+    begin
+      oRes = 0;
+      oValFun = null;
+      suspend;
+    end 
+  select oRes from UPDATE_PROD_FACT(:pIdProd, :vTypeProd)
+    into :oRes;
+end   
+

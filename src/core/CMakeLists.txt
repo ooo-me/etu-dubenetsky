@@ -1,18 +1,22 @@
-# Бизнес-логика
-add_library(TariffCore STATIC
-    Core.cpp
-    RuleEngine.hpp
-    CostCalculator.hpp
-    OptimalSearch.hpp
-    DomainService.hpp
+set(CORE_SOURCES
+    include/core/TariffService.h
+    include/core/Models.h
+    src/TariffService.cpp
 )
 
-target_include_directories(TariffCore PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
+add_library(core STATIC ${CORE_SOURCES})
+
+target_include_directories(core
+    PUBLIC
+        include
+    PRIVATE
+        include/core
+        src
 )
 
-target_link_libraries(TariffCore PUBLIC
-    TariffModel
+target_link_libraries(core
+    PUBLIC
+        tariff_sys::db
 )
 
-target_compile_features(TariffCore PUBLIC cxx_std_20)
+add_library(tariff_sys::core ALIAS core)

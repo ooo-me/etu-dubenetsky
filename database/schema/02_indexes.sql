@@ -101,87 +101,163 @@ CREATE INDEX IF NOT EXISTS IDX_CONST_COD
     ON CONST(COD_CONST);
 
 -- ============================================================================
--- Индексы для FACT_FUN
--- ============================================================================
-
-CREATE INDEX IF NOT EXISTS IDX_FACT_FUN_FUNCT 
-    ON FACT_FUN(ID_FUNCT);
-
-CREATE INDEX IF NOT EXISTS IDX_FACT_FUN_PROD 
-    ON FACT_FUN(ID_PR);
-
-CREATE INDEX IF NOT EXISTS IDX_FACT_FUN_FUNCT_PROD 
-    ON FACT_FUN(ID_FUNCT, ID_PR);
-
--- ============================================================================
--- Индексы для FACT_PAR
--- ============================================================================
-
-CREATE INDEX IF NOT EXISTS IDX_FACT_PAR_FACT_FUN 
-    ON FACT_PAR(ID_FACT_FUN);
-
-CREATE INDEX IF NOT EXISTS IDX_FACT_PAR_ARG 
-    ON FACT_PAR(ID_ARG);
-
--- ============================================================================
--- Индексы для DECISION_RULE
--- ============================================================================
-
-CREATE INDEX IF NOT EXISTS IDX_DECISION_RULE_FUNCT 
-    ON DECISION_RULE(ID_FUNCT);
-
-CREATE INDEX IF NOT EXISTS IDX_DECISION_RULE_PROD 
-    ON DECISION_RULE(ID_PR);
-
-CREATE INDEX IF NOT EXISTS IDX_DECISION_RULE_FUNCT_DEC 
-    ON DECISION_RULE(ID_FUNCT_DEC);
-
-CREATE INDEX IF NOT EXISTS IDX_DECISION_RULE_PRIORITET 
-    ON DECISION_RULE(PRIORITET);
-
--- ============================================================================
 -- Индексы для POS_ENUM
 -- ============================================================================
 
 CREATE INDEX IF NOT EXISTS IDX_POS_ENUM_ENUM 
     ON POS_ENUM(ID_ENUM);
 
-CREATE INDEX IF NOT EXISTS IDX_POS_ENUM_NUM 
-    ON POS_ENUM(NUM_POS);
-
 -- ============================================================================
--- Дополнительные ограничения целостности
+-- Индексы для FACT_FUN
 -- ============================================================================
 
--- Проверка типа функции
-ALTER TABLE FUNCT_R 
-    ADD CONSTRAINT CHK_FUNCT_R_TYPE 
-    CHECK (TYPE_F IN (0, 1, 2, 3));
+CREATE INDEX IF NOT EXISTS IDX_FACT_FUN_FUNCT 
+    ON FACT_FUN(ID_FUNCT);
 
--- Проверка типа параметра
-ALTER TABLE PARAMETR1 
-    ADD CONSTRAINT CHK_PARAMETR1_TYPE 
-    CHECK (TYPE_PAR IN (0, 1, 2, 3));
+CREATE INDEX IF NOT EXISTS IDX_FACT_FUN_PR 
+    ON FACT_FUN(ID_PR);
 
--- Проверка уровня иерархии
-ALTER TABLE CHEM_CLASS 
-    ADD CONSTRAINT CHK_CHEM_CLASS_LEV 
-    CHECK (LEV >= 0);
+-- ============================================================================
+-- Индексы для FACT_PAR
+-- ============================================================================
 
--- Проверка номера аргумента
-ALTER TABLE ARG_FUNCT 
-    ADD CONSTRAINT CHK_ARG_FUNCT_NUM 
-    CHECK (NUM_ARG > 0);
+CREATE INDEX IF NOT EXISTS IDX_FACT_PAR_ARG 
+    ON FACT_PAR(ID_ARG);
 
--- Проверка номера вызова
-ALTER TABLE FACT_FUN 
-    ADD CONSTRAINT CHK_FACT_FUN_NUM 
-    CHECK (NUM_CALL > 0);
+-- ============================================================================
+-- Индексы для SERVICE_TYPE
+-- ============================================================================
 
--- Проверка приоритета
-ALTER TABLE DECISION_RULE 
-    ADD CONSTRAINT CHK_DECISION_RULE_PRIORITET 
-    CHECK (PRIORITET >= 0);
+CREATE INDEX IF NOT EXISTS IDX_SERVICE_TYPE_CLASS 
+    ON SERVICE_TYPE(ID_CLASS);
+
+CREATE INDEX IF NOT EXISTS IDX_SERVICE_TYPE_COD 
+    ON SERVICE_TYPE(COD_SERVICE);
+
+-- ============================================================================
+-- Индексы для EXECUTOR
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_EXECUTOR_ACTIVE 
+    ON EXECUTOR(IS_ACTIVE);
+
+CREATE INDEX IF NOT EXISTS IDX_EXECUTOR_COD 
+    ON EXECUTOR(COD_EXECUTOR);
+
+-- ============================================================================
+-- Индексы для TARIFF
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_SERVICE_TYPE 
+    ON TARIFF(ID_SERVICE_TYPE);
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_EXECUTOR 
+    ON TARIFF(ID_EXECUTOR);
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_ACTIVE 
+    ON TARIFF(IS_ACTIVE);
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_DATE_RANGE 
+    ON TARIFF(DATE_BEGIN, DATE_END);
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_COD 
+    ON TARIFF(COD_TARIFF);
+
+-- ============================================================================
+-- Индексы для TARIFF_RATE
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_RATE_TARIFF 
+    ON TARIFF_RATE(ID_TARIFF);
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_RATE_COD 
+    ON TARIFF_RATE(COD_RATE);
+
+-- ============================================================================
+-- Индексы для TARIFF_RULE
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_RULE_TARIFF 
+    ON TARIFF_RULE(ID_TARIFF);
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_RULE_FUNCT 
+    ON TARIFF_RULE(ID_FUNCT);
+
+-- ============================================================================
+-- Индексы для SERVICE_ORDER
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_SERVICE_TYPE 
+    ON SERVICE_ORDER(ID_SERVICE_TYPE);
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_EXECUTOR 
+    ON SERVICE_ORDER(ID_EXECUTOR);
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_STATUS 
+    ON SERVICE_ORDER(STATUS);
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_DATE 
+    ON SERVICE_ORDER(ORDER_DATE);
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_COD 
+    ON SERVICE_ORDER(COD_ORDER);
+
+-- ============================================================================
+-- Индексы для ORDER_PARAM
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_PARAM_ORDER 
+    ON ORDER_PARAM(ID_ORDER);
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_PARAM_PAR 
+    ON ORDER_PARAM(ID_PAR);
+
+-- ============================================================================
+-- Индексы для ORDER_ITEM
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_ITEM_ORDER 
+    ON ORDER_ITEM(ID_ORDER);
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_ITEM_SERVICE_TYPE 
+    ON ORDER_ITEM(ID_SERVICE_TYPE);
+
+-- ============================================================================
+-- Индексы для ORDER_ITEM_PARAM
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_ITEM_PARAM_ITEM 
+    ON ORDER_ITEM_PARAM(ID_ORDER_ITEM);
+
+CREATE INDEX IF NOT EXISTS IDX_ORDER_ITEM_PARAM_PAR 
+    ON ORDER_ITEM_PARAM(ID_PAR);
+
+-- ============================================================================
+-- Индексы для COEFFICIENT
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_COEFFICIENT_COD 
+    ON COEFFICIENT(COD_COEFF);
+
+-- ============================================================================
+-- Индексы для TARIFF_COEFFICIENT
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_COEFF_TARIFF 
+    ON TARIFF_COEFFICIENT(ID_TARIFF);
+
+CREATE INDEX IF NOT EXISTS IDX_TARIFF_COEFF_COEFF 
+    ON TARIFF_COEFFICIENT(ID_COEFFICIENT);
+
+-- ============================================================================
+-- Индексы для SERVICE_TYPE_PARAM
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS IDX_SERVICE_TYPE_PARAM_ST 
+    ON SERVICE_TYPE_PARAM(ID_SERVICE_TYPE);
+
+CREATE INDEX IF NOT EXISTS IDX_SERVICE_TYPE_PARAM_PAR 
+    ON SERVICE_TYPE_PARAM(ID_PAR);
 
 -- ============================================================================
 -- Конец скрипта создания индексов
