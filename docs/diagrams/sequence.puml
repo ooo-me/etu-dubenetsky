@@ -1,0 +1,135 @@
+@startuml sequence
+!theme plain
+
+title Диаграмма последовательности\nРасчет стоимости заказа
+
+actor "Оператор" as Operator
+participant "OrderForm" as Form
+participant "CostCalculator" as Calculator
+participant "RuleEngine" as Engine
+participant "Database" as DB
+participant "Tariff" as Tariff
+participant "Rule" as Rule
+
+activate Operator
+
+== Создание заказа ==
+
+Operator -> Form: Заполнить параметры заказа
+activate Form
+
+Form -> Form: Валидация параметров
+Form -> DB: Сохранить заказ\nINS_OB(...)
+activate DB
+DB --> Form: order_id
+deactivate DB
+
+Form -> DB: Сохранить параметры\nPAR_PROD2
+activate DB
+DB --> Form: OK
+deactivate DB
+
+== Расчет стоимости ==
+
+Operator -> Form: Нажать "Рассчитать"
+Form -> Calculator: calculateCost(order, tariff)
+activate Calculator
+
+Calculator -> DB: Загрузить тариф
+activate DB
+DB --> Calculator: tariff_data
+deactivate DB
+
+Calculator -> Tariff: getRules()
+activate Tariff
+Tariff --> Calculator: rules[]
+deactivate Tariff
+
+Calculator -> Engine: applyTariffRules(tariff, order)
+activate Engine
+
+Engine -> Engine: createContext(order)
+note right
+  Контекст содержит:
+  - Параметры заказа
+  - Константы
+end note
+
+loop Для каждого правила по приоритету
+    Engine -> Rule: evaluate(context)
+    activate Rule
+    
+    alt Если есть условие
+        Rule -> Rule: condition.evaluate(context)
+        
+        alt Условие истинно
+            Rule -> Rule: action.evaluate(context)
+            note right
+              Вычисление действия:
+              - ArithmeticExpression
+              - ComparisonExpression
+              - LogicalExpression
+            end note
+            Rule --> Engine: result
+        else Условие ложно
+            Rule --> Engine: skip
+        end
+    else Безусловное правило
+        Rule -> Rule: action.evaluate(context)
+        Rule --> Engine: result
+    end
+    
+    deactivate Rule
+    
+    alt Результат получен
+        Engine --> Calculator: cost_value
+        note left: Выход из цикла
+    end
+end
+
+deactivate Engine
+
+Calculator -> DB: Сохранить результат\nUPDATE_VAL_ROLE(...)
+activate DB
+DB --> Calculator: OK
+deactivate DB
+
+Calculator -> DB: Обновить статус заказа
+activate DB
+DB --> Calculator: OK
+deactivate DB
+
+Calculator --> Form: calculated_cost
+deactivate Calculator
+
+Form -> Form: Отобразить результат
+Form --> Operator: Стоимость: X руб
+deactivate Form
+
+== Поиск оптимального тарифа ==
+
+Operator -> Form: Нажать "Найти оптимальный"
+activate Form
+
+Form -> Calculator: calculateWithAllTariffs(order, tariffs[])
+activate Calculator
+
+loop Для каждого тарифа
+    Calculator -> Engine: applyTariffRules(tariff, order)
+    activate Engine
+    Engine --> Calculator: cost or error
+    deactivate Engine
+    Calculator -> Calculator: Сохранить результат
+end
+
+Calculator -> Calculator: Сортировать по стоимости
+Calculator --> Form: sorted_results[]
+deactivate Calculator
+
+Form -> Form: Отобразить сравнение
+Form --> Operator: Лучший тариф: Y\nЭкономия: Z руб
+deactivate Form
+
+deactivate Operator
+
+@enduml

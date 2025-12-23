@@ -39,3 +39,60 @@
 
 # debug information files
 *.dwo
+
+# CMake build directories
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Qt files
+*.pro.user
+*.qrc.depends
+.qmake.stash
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.autosave
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# PostgreSQL
+*.backup
+*.dump
+
+# Temporary files
+/tmp/
+
+#Ignore thumbnails created by Windows
+Thumbs.db
+#Ignore files built by Visual Studio
+*.user
+*.aps
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.log
+[Bb]in
+[Dd]ebug*/
+*.sbr
+obj/
+[Rr]elease*/
+_ReSharper*/
+[Tt]est[Rr]esult*
+.vs/
+#Nuget packages folder
+packages/

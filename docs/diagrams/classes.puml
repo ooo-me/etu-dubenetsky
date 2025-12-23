@@ -1,0 +1,331 @@
+@startuml classes
+!theme plain
+
+title Диаграмма классов\nМодель предметной области
+
+' Базовые классы
+abstract class Service {
+  - id: int
+  - code: string
+  - name: string
+  - description: string
+  - classId: int
+  __
+  + getId(): int
+  + getCode(): string
+  + getName(): string
+  + getParameters(): vector<Parameter>
+  + {abstract} calculateBaseCost(): double
+}
+
+class Parameter {
+  - id: int
+  - name: string
+  - type: ParameterType
+  - unit: string
+  - isRequired: bool
+  - defaultValue: variant
+  __
+  + getValue(): variant
+  + setValue(value: variant): void
+  + validate(): bool
+}
+
+enum ParameterType {
+  INTEGER
+  DOUBLE
+  STRING
+  BOOLEAN
+  ENUMERATION
+  DATE
+}
+
+class Classifier {
+  - id: int
+  - code: string
+  - name: string
+  - parentId: int
+  - level: int
+  __
+  + getChildren(): vector<Classifier>
+  + getParent(): Classifier*
+}
+
+' Специализированные классы услуг
+class CargoService {
+  - cargoWeight: double
+  - cargoVolume: double
+  - palletCount: int
+  - vehicleClass: VehicleClass
+  - timeInterval: TimeInterval
+  - routeType: RouteType
+  __
+  + calculateBaseCost(): double
+  + getCargoWeight(): double
+  + setCargoWeight(weight: double): void
+}
+
+class StorageService {
+  - avgPalletPlaces: double
+  - palletModel: string
+  - turnover: double
+  - operationType: OperationType
+  - additionalServices: vector<string>
+  __
+  + calculateBaseCost(): double
+  + calculateMonthlyBudget(): double
+}
+
+enum VehicleClass {
+  CLOSED
+  OPEN
+  REFRIGERATOR
+}
+
+enum TimeInterval {
+  HOURS_4
+  HOURS_8
+  HOURS_4_PLUS_1
+  HOURS_5_PLUS_1
+  HOURS_6_PLUS_1
+}
+
+enum RouteType {
+  CITY
+  REGION
+  INTERCITY
+}
+
+enum OperationType {
+  MECHANIZED
+  MANUAL
+  PIECE_GOODS
+}
+
+' Тарифы и правила
+class Tariff {
+  - id: int
+  - code: string
+  - name: string
+  - description: string
+  - serviceClassId: int
+  - isActive: bool
+  - validFrom: Date
+  - validTo: Date
+  - rules: vector<Rule>
+  __
+  + getRules(): vector<Rule>
+  + addRule(rule: Rule): void
+  + isValid(date: Date): bool
+  + calculate(order: Order): double
+}
+
+class Rule {
+  - id: int
+  - name: string
+  - formula: string
+  - priority: int
+  - condition: Expression
+  - action: Expression
+  __
+  + evaluate(context: Context): variant
+  + getCondition(): Expression
+  + getAction(): Expression
+}
+
+abstract class Expression {
+  - type: ExpressionType
+  __
+  + {abstract} evaluate(context: Context): variant
+  + {abstract} toString(): string
+}
+
+class ArithmeticExpression {
+  - operator: ArithmeticOperator
+  - left: Expression*
+  - right: Expression*
+  __
+  + evaluate(context: Context): variant
+}
+
+class LogicalExpression {
+  - operator: LogicalOperator
+  - operands: vector<Expression*>
+  __
+  + evaluate(context: Context): variant
+}
+
+class ComparisonExpression {
+  - operator: ComparisonOperator
+  - left: Expression*
+  - right: Expression*
+  __
+  + evaluate(context: Context): variant
+}
+
+class ConstantExpression {
+  - value: variant
+  __
+  + evaluate(context: Context): variant
+}
+
+class ParameterExpression {
+  - parameterId: int
+  __
+  + evaluate(context: Context): variant
+}
+
+enum ArithmeticOperator {
+  ADD
+  SUBTRACT
+  MULTIPLY
+  DIVIDE
+}
+
+enum LogicalOperator {
+  AND
+  OR
+  NOT
+}
+
+enum ComparisonOperator {
+  LESS_THAN
+  LESS_EQUAL
+  EQUAL
+  GREATER_EQUAL
+  GREATER_THAN
+}
+
+' Заказы
+class Order {
+  - id: int
+  - code: string
+  - name: string
+  - serviceId: int
+  - tariffId: int
+  - orderDate: Date
+  - status: OrderStatus
+  - parameters: map<int, variant>
+  - calculatedCost: double
+  __
+  + addParameter(paramId: int, value: variant): void
+  + getParameter(paramId: int): variant
+  + calculateCost(): double
+  + getService(): Service*
+  + getTariff(): Tariff*
+}
+
+enum OrderStatus {
+  DRAFT
+  CALCULATED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+' Бизнес-логика
+class RuleEngine {
+  - database: Database*
+  __
+  + evaluateRule(rule: Rule, context: Context): variant
+  + calculateExpression(expr: Expression, context: Context): variant
+  + checkCondition(condition: Expression, context: Context): bool
+}
+
+class CostCalculator {
+  - ruleEngine: RuleEngine*
+  __
+  + calculateCost(order: Order, tariff: Tariff): double
+  + calculateWithAllTariffs(order: Order): map<int, double>
+}
+
+class TariffConstructor {
+  - database: Database*
+  __
+  + createService(classId: int, data: ServiceData): Service*
+  + createTariff(serviceId: int, data: TariffData): Tariff*
+  + addRule(tariffId: int, rule: Rule): void
+  + addParameter(serviceId: int, param: Parameter): void
+}
+
+class OptimalSearcher {
+  - calculator: CostCalculator*
+  __
+  + findOptimalTariff(order: Order): pair<Tariff*, double>
+  + compareAllTariffs(order: Order): vector<TariffResult>
+}
+
+class Context {
+  - order: Order*
+  - parameters: map<int, variant>
+  - constants: map<string, variant>
+  __
+  + getParameter(id: int): variant
+  + getConstant(name: string): variant
+  + setParameter(id: int, value: variant): void
+}
+
+class Database {
+  - connection: Connection*
+  __
+  + executeQuery(query: string): ResultSet
+  + executeProcedure(name: string, args: vector): ResultSet
+  + beginTransaction(): void
+  + commit(): void
+  + rollback(): void
+}
+
+' Связи наследования
+Service <|-- CargoService
+Service <|-- StorageService
+Expression <|-- ArithmeticExpression
+Expression <|-- LogicalExpression
+Expression <|-- ComparisonExpression
+Expression <|-- ConstantExpression
+Expression <|-- ParameterExpression
+
+' Ассоциации
+Service "1" *-- "*" Parameter : содержит
+Service "*" -- "1" Classifier : классифицируется
+Tariff "1" *-- "*" Rule : содержит
+Tariff "*" -- "1" Service : применяется к
+Rule "1" o-- "1" Expression : условие
+Rule "1" o-- "1" Expression : действие
+Order "*" -- "1" Service : заказывает
+Order "*" -- "1" Tariff : использует
+Order "1" *-- "*" Parameter : параметры заказа
+
+' Зависимости
+RuleEngine ..> Rule : использует
+RuleEngine ..> Expression : вычисляет
+RuleEngine ..> Context : использует
+CostCalculator ..> RuleEngine : использует
+CostCalculator ..> Order : обрабатывает
+CostCalculator ..> Tariff : применяет
+TariffConstructor ..> Service : создает
+TariffConstructor ..> Tariff : создает
+TariffConstructor ..> Database : использует
+OptimalSearcher ..> CostCalculator : использует
+OptimalSearcher ..> Tariff : анализирует
+Context ..> Order : содержит
+Context ..> Parameter : содержит
+
+note top of RuleEngine
+  Ядро системы правил.
+  Выполняет вычисление выражений
+  и проверку условий.
+end note
+
+note top of CostCalculator
+  Рассчитывает стоимость заказа
+  по тарифу с применением
+  всех правил.
+end note
+
+note right of OptimalSearcher
+  Находит оптимальный тариф
+  по критерию минимальной
+  стоимости.
+end note
+
+@enduml

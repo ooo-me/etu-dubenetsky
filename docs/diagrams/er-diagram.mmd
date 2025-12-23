@@ -1,0 +1,253 @@
+```mermaid
+erDiagram
+    %% Классификатор компонентов системы
+    CHEM_CLASS {
+        int ID_CHEM PK "ID класса"
+        string COD_CHEM UK "Код класса"
+        string NAME_CHEM "Название класса"
+        int PARENT_ID FK "ID родительского класса"
+        int LEV "Уровень в иерархии"
+        string NOTE "Примечание"
+    }
+
+    %% Функции и правила
+    FUNCT_R {
+        int ID_FUNCT PK "ID функции"
+        string COD_FUNCT UK "Код функции"
+        string NAME_FUNCT "Название функции"
+        int TYPE_F "Тип функции (0-предикат,1-арифм,2-лог,3-выбор)"
+        string OPERATION "Операция (+,-,*,/,<,<=,=,>=,>,AND,OR,NOT,IF)"
+        string NOTE "Примечание"
+    }
+
+    %% Аргументы функций
+    ARG_FUNCT {
+        int ID_ARG PK "ID аргумента"
+        int ID_FUNCT FK "ID функции"
+        int NUM_ARG "Номер аргумента"
+        int CLASS_ARG FK "Класс аргумента"
+        string NAME_ARG "Название аргумента"
+        string NOTE "Примечание"
+    }
+
+    %% Объекты предметной области
+    PROD {
+        int ID_PR PK "ID объекта"
+        int CLASS_PR FK "Класс объекта"
+        string COD_PR UK "Код объекта"
+        string NAME_PR "Название объекта"
+        int PAR_PR FK "Родительский объект"
+        string NOTE "Примечание"
+    }
+
+    %% Значения функций для объектов (роли)
+    ROLE_VAL {
+        int ID_FUNCT FK "ID функции"
+        int ID_PR FK "ID объекта"
+        int ID_VAL_CONST FK "ID значения-константы"
+        int ID_VAL_FUNCT FK "ID значения-функции"
+        double VAL_NUM "Числовое значение"
+        string VAL_STR "Строковое значение"
+        date VAL_DATE "Значение даты"
+        int ID_VAL_ENUM FK "ID значения перечисления"
+        string NOTE "Примечание"
+    }
+
+    %% Параметры объектов
+    PARAMETR1 {
+        int ID_PAR PK "ID параметра"
+        string COD_PAR UK "Код параметра"
+        string NAME_PAR "Название параметра"
+        int CLASS_PAR FK "Класс параметра"
+        int TYPE_PAR "Тип параметра (0-число,1-строка,2-дата,3-перечисление)"
+        int EI FK "Единица измерения"
+        string NOTE "Примечание"
+    }
+
+    %% Классы параметров
+    PAR_CLASS1 {
+        int ID_PAR FK "ID параметра"
+        int ID_CHEM FK "ID класса"
+    }
+
+    %% Параметры объектов
+    PAR_PROD2 {
+        int ID_PAR FK "ID параметра"
+        int ID_PR FK "ID объекта"
+        double VAL_NUM "Числовое значение"
+        string VAL_STR "Строковое значение"
+        date VAL_DATE "Значение даты"
+        int ID_VAL_ENUM FK "ID значения перечисления"
+        int IS_REQUIRE "Обязательность"
+        string NOTE "Примечание"
+    }
+
+    %% Константы
+    CONST {
+        int ID_CONST PK "ID константы"
+        string COD_CONST UK "Код константы"
+        string NAME_CONST "Название константы"
+        double VAL_NUM "Числовое значение"
+        string VAL_STR "Строковое значение"
+        date VAL_DATE "Значение даты"
+        int EI FK "Единица измерения"
+        string NOTE "Примечание"
+    }
+
+    %% Композитные функции
+    FUN_COMP {
+        int ID_FUNCT FK "ID композитной функции"
+        int ID_FUNCT_COMP FK "ID функции-компонента"
+    }
+
+    %% Вызовы функций (фактические функции)
+    FACT_FUN {
+        int ID_FACT_FUN PK "ID вызова функции"
+        int ID_FUNCT FK "ID функции"
+        int ID_PR FK "ID объекта"
+        int NUM_CALL "Номер вызова"
+        string NOTE "Примечание"
+    }
+
+    %% Фактические параметры вызовов
+    FACT_PAR {
+        int ID_FACT_FUN FK "ID вызова функции"
+        int ID_ARG FK "ID аргумента"
+        int ID_VAL_CONST FK "ID значения-константы"
+        int ID_VAL_FUNCT FK "ID значения-функции"
+        int ID_VAL_FACT_FUN FK "ID значения-вызова функции"
+        double VAL_NUM "Числовое значение"
+        string VAL_STR "Строковое значение"
+        date VAL_DATE "Значение даты"
+        int ID_VAL_ENUM FK "ID значения перечисления"
+        string NOTE "Примечание"
+    }
+
+    %% Решения для правил
+    DECISION_RULE {
+        int ID_FUNCT FK "ID функции-правила"
+        int ID_PR FK "ID объекта"
+        int NUM_CALL "Номер вызова"
+        int ID_FUNCT_DEC FK "ID функции-решения"
+        int PRIORITET "Приоритет"
+        string NOTE "Примечание"
+    }
+
+    %% Единицы измерения
+    EI {
+        int ID_EI PK "ID единицы измерения"
+        string COD_EI UK "Код единицы"
+        string NAME_EI "Название единицы"
+        string NOTE "Примечание"
+    }
+
+    %% Перечисления
+    ENUM_VAL_R {
+        int ID_ENUM PK "ID перечисления"
+        string COD_ENUM UK "Код перечисления"
+        string NAME_ENUM "Название перечисления"
+        string NOTE "Примечание"
+    }
+
+    %% Позиции перечислений
+    POS_ENUM {
+        int ID_ENUM FK "ID перечисления"
+        int ID_POS_ENUM PK "ID позиции"
+        string COD_POS UK "Код позиции"
+        string NAME_POS "Название позиции"
+        int NUM_POS "Номер позиции"
+        string NOTE "Примечание"
+    }
+
+    %% Связи между таблицами
+    CHEM_CLASS ||--o{ CHEM_CLASS : "parent-child"
+    CHEM_CLASS ||--o{ PROD : "классифицирует"
+    CHEM_CLASS ||--o{ ARG_FUNCT : "тип аргумента"
+    CHEM_CLASS ||--o{ PAR_CLASS1 : "класс параметра"
+    
+    FUNCT_R ||--o{ ARG_FUNCT : "имеет аргументы"
+    FUNCT_R ||--o{ ROLE_VAL : "определяет роль"
+    FUNCT_R ||--o{ FUN_COMP : "композиция"
+    FUNCT_R ||--o{ FACT_FUN : "вызывается"
+    FUNCT_R ||--o{ DECISION_RULE : "правило"
+    FUNCT_R ||--o{ DECISION_RULE : "решение"
+    
+    PROD ||--o{ PROD : "parent-child"
+    PROD ||--o{ ROLE_VAL : "имеет значения ролей"
+    PROD ||--o{ PAR_PROD2 : "имеет параметры"
+    PROD ||--o{ FACT_FUN : "контекст вызова"
+    PROD ||--o{ DECISION_RULE : "применяется правило"
+    
+    PARAMETR1 ||--o{ PAR_CLASS1 : "применяется к классу"
+    PARAMETR1 ||--o{ PAR_PROD2 : "значение для объекта"
+    
+    CONST ||--o{ ROLE_VAL : "значение константы"
+    CONST ||--o{ FACT_PAR : "параметр-константа"
+    
+    FACT_FUN ||--o{ FACT_PAR : "параметры вызова"
+    FACT_FUN ||--o{ ROLE_VAL : "результат вызова"
+    FACT_FUN ||--o{ FACT_PAR : "результат другого вызова"
+    
+    ARG_FUNCT ||--o{ FACT_PAR : "фактический параметр"
+    
+    EI ||--o{ PARAMETR1 : "единица параметра"
+    EI ||--o{ CONST : "единица константы"
+    
+    ENUM_VAL_R ||--o{ POS_ENUM : "позиции перечисления"
+    POS_ENUM ||--o{ ROLE_VAL : "значение перечисления"
+    POS_ENUM ||--o{ PAR_PROD2 : "значение параметра"
+    POS_ENUM ||--o{ FACT_PAR : "параметр перечисления"
+```
+
+## Описание модели данных
+
+### Основные таблицы
+
+1. **CHEM_CLASS** - Классификатор компонентов системы
+   - Иерархическая структура классов (услуги, тарифы, заказы)
+   - Поддержка многоуровневой классификации
+
+2. **FUNCT_R** - Функции и правила
+   - Предикаты (сравнение)
+   - Арифметические выражения (+, -, *, /)
+   - Логические выражения (AND, OR, NOT)
+   - Функции выбора (CASE/IF-THEN-ELSE)
+
+3. **PROD** - Объекты предметной области
+   - Услуги (грузоперевозки, хранение)
+   - Тарифы на услуги
+   - Заказы клиентов
+   - Иерархическая структура
+
+4. **ROLE_VAL** - Значения функций для объектов
+   - Связывает функции с объектами
+   - Хранит результаты вычислений
+   - Поддержка различных типов значений
+
+5. **PARAMETR1** - Определения параметров
+   - Метаданные параметров
+   - Типизация (число, строка, дата, перечисление)
+   - Единицы измерения
+
+6. **PAR_PROD2** - Значения параметров объектов
+   - Конкретные значения параметров для объектов
+   - Признак обязательности
+
+7. **FACT_FUN** - Вызовы функций
+   - Фактические вызовы функций в контексте объектов
+   - Поддержка множественных вызовов
+
+8. **FACT_PAR** - Фактические параметры
+   - Аргументы вызовов функций
+   - Связи с константами, функциями, другими вызовами
+
+9. **DECISION_RULE** - Решения правил
+   - Связывает условия с действиями
+   - Приоритеты выполнения
+
+### Особенности модели
+
+- **Метамодель**: Система использует метамодель для описания правил на уровне данных
+- **Гибкость**: Возможность добавления новых типов услуг без изменения схемы
+- **Рекурсивность**: Функции могут вызывать другие функции
+- **Типизация**: Поддержка различных типов данных и их преобразований
