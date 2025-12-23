@@ -73,7 +73,7 @@ public:
      */
     explicit DomainService(std::shared_ptr<DatabaseManager> db)
         : db_(db)
-        , repository_(std::make_unique<TariffSystemRepository>(db))
+        , repository_(std::make_unique<TariffSystem::Repository::TariffSystemRepository>(db))
         , ruleEngine_(std::make_unique<RuleEngine>())
         , costCalculator_(std::make_unique<CostCalculator>(ruleEngine_.get()))
         , optimalSearcher_(std::make_unique<OptimalSearcher>())
@@ -774,7 +774,7 @@ private:
     
     // Зависимости
     std::shared_ptr<DatabaseManager> db_;
-    std::unique_ptr<TariffSystemRepository> repository_;
+    std::unique_ptr<TariffSystem::Repository::TariffSystemRepository> repository_;
     std::unique_ptr<RuleEngine> ruleEngine_;
     std::unique_ptr<CostCalculator> costCalculator_;
     std::unique_ptr<OptimalSearcher> optimalSearcher_;

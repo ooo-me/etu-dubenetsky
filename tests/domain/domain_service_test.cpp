@@ -20,9 +20,9 @@ using namespace TariffSystem::Model;
 /**
  * Получение переменной окружения с значением по умолчанию
  */
-static String getEnvOrDefault(const char* name, const char* defaultValue) {
+static std::string getEnvOrDefault(const char* name, const char* defaultValue) {
     const char* value = std::getenv(name);
-    return value ? String(value) : String(defaultValue);
+    return value ? std::string(value) : std::string(defaultValue);
 }
 
 /**
@@ -233,23 +233,23 @@ TEST_F(DomainServiceTest, RealWorldScenario_CompleteOrderFlow) {
         "Доставка стройматериалов"
     );
     ASSERT_NE(order, nullptr);
-    EXPECT_EQ(order->getStatus(), OrderStatus::DRAFT);
+    EXPECT_EQ(order->getStatus(), TariffSystem::OrderStatus::DRAFT);
     
     // Шаг 5: Заполнение параметров заказа
-    auto result1 = service->setOrderParameter(order->getId(), 1, Double{2.5});
+    auto result1 = service->setOrderParameter(order->getId(), 1, 2.5);
     EXPECT_TRUE(result1.success);
     
-    auto result2 = service->setOrderParameter(order->getId(), 2, Double{45.0});
+    auto result2 = service->setOrderParameter(order->getId(), 2, 45.0);
     EXPECT_TRUE(result2.success);
     
-    auto result3 = service->setOrderParameter(order->getId(), 3, Double{3.0});
+    auto result3 = service->setOrderParameter(order->getId(), 3, 3.0);
     EXPECT_TRUE(result3.success);
     
     // Шаг 6: Проверка персистентности - данные сохранены в БД
     service->clearCache();  // Очистка кэша
     auto retrievedOrder = service->getOrder(order->getId());
     ASSERT_NE(retrievedOrder, nullptr);
-    EXPECT_EQ(retrievedOrder->getStatus(), OrderStatus::DRAFT);
+    EXPECT_EQ(retrievedOrder->getStatus(), TariffSystem::OrderStatus::DRAFT);
     
     // Шаг 7: Подтверждение заказа
     auto confirmResult = service->confirmOrder(
@@ -262,7 +262,7 @@ TEST_F(DomainServiceTest, RealWorldScenario_CompleteOrderFlow) {
     // Шаг 8: Проверка финального состояния
     auto finalOrder = service->getOrder(order->getId());
     ASSERT_NE(finalOrder, nullptr);
-    EXPECT_EQ(finalOrder->getStatus(), OrderStatus::CONFIRMED);
+    EXPECT_EQ(finalOrder->getStatus(), TariffSystem::OrderStatus::CONFIRMED);
     EXPECT_GT(finalOrder->getCost(), 0.0);
 }
 
