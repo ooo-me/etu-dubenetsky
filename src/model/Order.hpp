@@ -39,6 +39,20 @@ public:
         auto days = std::chrono::floor<std::chrono::days>(now);
         orderDate_ = std::chrono::year_month_day{days};
     }
+    
+    // Конструктор с 2 параметрами для совместимости  
+    Order(Integer id, String code)
+        : id_(id)
+        , code_(std::move(code))
+        , name_("")
+        , serviceId_(0)
+        , status_(OrderStatus::DRAFT)
+        , calculatedCost_(0.0)
+    {
+        auto now = std::chrono::system_clock::now();
+        auto days = std::chrono::floor<std::chrono::days>(now);
+        orderDate_ = std::chrono::year_month_day{days};
+    }
 
     // Геттеры
     Integer getId() const { return id_; }
@@ -49,12 +63,16 @@ public:
     OrderStatus getStatus() const { return status_; }
     const Date& getOrderDate() const { return orderDate_; }
     Double getCalculatedCost() const { return calculatedCost_; }
+    Double getCost() const { return calculatedCost_; }  // Alias для совместимости
     const std::optional<String>& getNote() const { return note_; }
+    const std::optional<String>& getCustomerName() const { return customerName_; }
 
     // Сеттеры
     void setTariffId(Integer tariffId) { tariffId_ = tariffId; }
     void setStatus(OrderStatus status) { status_ = status; }
     void setNote(String note) { note_ = std::move(note); }
+    void setCustomerName(String name) { customerName_ = std::move(name); }
+    void setCost(Double cost) { setCalculatedCost(cost); }  // Alias для совместимости
 
     /**
      * Добавление параметра к заказу
@@ -155,6 +173,7 @@ private:
     Date orderDate_;                              // Дата заказа
     Double calculatedCost_;                       // Рассчитанная стоимость
     std::optional<String> note_;                  // Примечание
+    std::optional<String> customerName_;          // Имя заказчика
     std::map<Integer, ParameterValue> parameters_; // Параметры заказа
 };
 

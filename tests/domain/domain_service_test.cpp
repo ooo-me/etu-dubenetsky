@@ -18,6 +18,14 @@ using namespace TariffSystem::Database;
 using namespace TariffSystem::Model;
 
 /**
+ * Получение переменной окружения с значением по умолчанию
+ */
+static String getEnvOrDefault(const char* name, const char* defaultValue) {
+    const char* value = std::getenv(name);
+    return value ? String(value) : String(defaultValue);
+}
+
+/**
  * Базовый класс для тестов DomainService
  * Настраивает подключение к БД для каждого теста
  */
@@ -64,19 +72,11 @@ protected:
     void cleanupTestData() {
         try {
             // Удаление тестовых записей (если они помечены специальным префиксом)
-            db->execute("DELETE FROM PROD WHERE COD LIKE 'TEST_%'");
+            db->execute("DELETE FROM PROD WHERE COD_PR LIKE 'TEST_%'");
             db->execute("DELETE FROM CHEM_CLASS WHERE COD_CHEM LIKE 'TEST_%'");
         } catch (...) {
             // Игнорируем ошибки при очистке
         }
-    }
-    
-    /**
-     * Получение переменной окружения с значением по умолчанию
-     */
-    static String getEnvOrDefault(const char* name, const char* defaultValue) {
-        const char* value = std::getenv(name);
-        return value ? String(value) : String(defaultValue);
     }
     
     std::shared_ptr<DatabaseManager> db;

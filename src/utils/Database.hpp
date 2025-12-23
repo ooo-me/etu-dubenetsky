@@ -270,6 +270,13 @@ public:
     }
     
     /**
+     * Выполнение SQL команды без возврата результата
+     */
+    void execute(const String& query) {
+        executeQuery(query);
+    }
+    
+    /**
      * Получение последней ошибки
      */
     const String& getLastError() const {

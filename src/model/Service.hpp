@@ -33,6 +33,14 @@ public:
         , name_(std::move(name))
         , classId_(classId)
     {}
+    
+    // Конструктор с 3 параметрами для совместимости
+    Service(Integer id, String code, String name)
+        : id_(id)
+        , code_(std::move(code))
+        , name_(std::move(name))
+        , classId_(0)
+    {}
 
     virtual ~Service() = default;
 

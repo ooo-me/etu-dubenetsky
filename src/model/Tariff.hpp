@@ -33,6 +33,15 @@ public:
         , serviceClassId_(serviceClassId)
         , isActive_(true)
     {}
+    
+    // Конструктор с 3 параметрами для совместимости
+    Tariff(Integer id, String code, String name)
+        : id_(id)
+        , code_(std::move(code))
+        , name_(std::move(name))
+        , serviceClassId_(0)
+        , isActive_(true)
+    {}
 
     // Геттеры
     Integer getId() const { return id_; }
@@ -44,6 +53,7 @@ public:
     const std::optional<Date>& getValidFrom() const { return validFrom_; }
     const std::optional<Date>& getValidTo() const { return validTo_; }
     const std::optional<String>& getNote() const { return note_; }
+    const std::optional<String>& getProvider() const { return provider_; }
 
     // Сеттеры
     void setDescription(String description) { description_ = std::move(description); }
@@ -51,6 +61,17 @@ public:
     void setValidFrom(Date validFrom) { validFrom_ = validFrom; }
     void setValidTo(Date validTo) { validTo_ = validTo; }
     void setNote(String note) { note_ = std::move(note); }
+    void setProvider(String provider) { provider_ = std::move(provider); }
+    
+    /**
+     * Активация тарифа
+     */
+    void activate() { isActive_ = true; }
+    
+    /**
+     * Деактивация тарифа
+     */
+    void deactivate() { isActive_ = false; }
 
     /**
      * Добавление правила к тарифу
@@ -107,6 +128,7 @@ private:
     Integer serviceClassId_;                        // ID класса услуги
     bool isActive_;                                 // Признак активности
     std::optional<String> description_;             // Описание
+    std::optional<String> provider_;                // Поставщик тарифа
     std::optional<Date> validFrom_;                 // Дата начала действия
     std::optional<Date> validTo_;                   // Дата окончания действия
     std::optional<String> note_;                    // Примечание

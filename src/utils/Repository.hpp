@@ -186,15 +186,14 @@ public:
      * Создание объекта через процедуру INS_OB
      */
     Integer createObject(Integer classId, const String& code, const String& name,
-                        std::optional<Integer> parentId = std::nullopt,
                         const String& note = "") {
         String query = "SELECT INS_OB($1, $2, $3, $4, $5)";
         std::vector<String> params = {
             std::to_string(classId),
             code,
             name,
-            parentId ? std::to_string(*parentId) : "NULL",
-            note
+            "NULL",  // parentId
+            note.empty() ? "" : note
         };
         
         auto result = db_->executeQuery(query, params);
@@ -203,6 +202,143 @@ public:
             if (id) return *id;
         }
         throw DatabaseException("Не удалось создать объект");
+    }
+    
+    /**
+     * Получение объекта как Service
+     */
+    std::shared_ptr<Service> getObjectById(Integer id) {
+        auto [classId, code, name, note] = getObject(id);
+        auto service = std::make_shared<Service>(id, code, name);
+        if (note) {
+            service->setNote(*note);
+        }
+        return service;
+    }
+    
+    /**
+     * Получение тарифа по ID
+     */
+    std::shared_ptr<Tariff> getTariffById(Integer id) {
+        auto [classId, code, name, note] = getObject(id);
+        auto tariff = std::make_shared<Tariff>(id, code, name);
+        if (note) {
+            tariff->setNote(*note);
+        }
+        return tariff;
+    }
+    
+    /**
+     * Получение заказа по ID
+     */
+    std::shared_ptr<Order> getOrderById(Integer id) {
+        auto [classId, code, name, note] = getObject(id);
+        auto order = std::make_shared<Order>(id, code);
+        if (note) {
+            order->setNote(*note);
+        }
+        return order;
+    }
+    
+    /**
+     * Установка значения параметра
+     */
+    void setParameterValue(Integer objectId, Integer parameterId, const ParameterValue& value) {
+        // Извлечение значения из variant
+        if (std::holds_alternative<Double>(value)) {
+            updateRoleValue(parameterId, objectId, std::get<Double>(value));
+        }
+        // Добавить обработку других типов при необходимости
+    }
+    
+    /**
+     * Добавление параметра к объекту
+     */
+    void addParameterToObject(Integer objectId, Integer parameterId) {
+        // Связывание параметра с объектом через PAR_PROD2 или аналогичную таблицу
+        String query = "INSERT INTO PAR_PROD2 (ID_PR, ID_PAR) VALUES ($1, $2)";
+        db_->executeQuery(query, {std::to_string(objectId), std::to_string(parameterId)});
+    }
+    
+    /**
+     * Получение правил для тарифа
+     */
+    std::vector<std::shared_ptr<Rule>> getRulesForTariff(Integer tariffId) {
+        // Загрузка правил из DECISION_RULE
+        std::vector<std::shared_ptr<Rule>> rules;
+        // TODO: реализация загрузки правил из БД
+        return rules;
+    }
+    
+    /**
+     * Добавление правила к тарифу
+     */
+    Integer addRuleToTariff(Integer tariffId, std::shared_ptr<Rule> rule) {
+        // Сохранение правила через INS_DEC_F
+        // TODO: реализация сохранения правила в БД
+        return 1;  // Временно возвращаем фиктивный ID
+    }
+    
+    /**
+     * Получение активных тарифов для услуги
+     */
+    std::vector<std::shared_ptr<Tariff>> getActiveTariffsForService(Integer serviceId) {
+        String query = "SELECT ID_PR, COD_PR, NAME_PR FROM PROD WHERE CLASS_PR = $1";
+        auto result = db_->executeQuery(query, {std::to_string(serviceId)});
+        
+        std::vector<std::shared_ptr<Tariff>> tariffs;
+        for (int i = 0; i < result->getRowCount(); ++i) {
+            auto id = result->getInt(i, 0);
+            auto code = result->getValue(i, 1);
+            auto name = result->getValue(i, 2);
+            
+            if (id && code && name) {
+                auto tariff = std::make_shared<Tariff>(*id, *code, *name);
+                tariff->activate();
+                tariffs.push_back(tariff);
+            }
+        }
+        return tariffs;
+    }
+    
+    /**
+     * Получение параметров заказа
+     */
+    std::map<Integer, ParameterValue> getOrderParameters(Integer orderId) {
+        return getObjectParameters(orderId);
+    }
+    
+    /**
+     * Обновление статуса заказа
+     */
+    void updateOrderStatus(Integer orderId, OrderStatus status) {
+        // Обновление статуса в БД
+        String query = "UPDATE PROD SET NOTE = $1 WHERE ID_PR = $2";
+        String statusStr;
+        switch (status) {
+            case OrderStatus::DRAFT: statusStr = "DRAFT"; break;
+            case OrderStatus::CALCULATED: statusStr = "CALCULATED"; break;
+            case OrderStatus::CONFIRMED: statusStr = "CONFIRMED"; break;
+            case OrderStatus::COMPLETED: statusStr = "COMPLETED"; break;
+            case OrderStatus::CANCELLED: statusStr = "CANCELLED"; break;
+        }
+        db_->executeQuery(query, {statusStr, std::to_string(orderId)});
+    }
+    
+    /**
+     * Обновление стоимости заказа
+     */
+    void updateOrderCost(Integer orderId, Double cost) {
+        // Сохранение стоимости через UPDATE_VAL_ROLE или специальное поле
+        updateRoleValue(1, orderId, cost);  // Предполагаем, что функция 1 - это стоимость
+    }
+    
+    /**
+     * Добавление примечания к заказу
+     */
+    void addOrderNote(Integer orderId, const String& note) {
+        String query = "UPDATE PROD SET NOTE = COALESCE(NOTE, '') || '\n' || $1 WHERE ID_PR = $2";
+        db_->executeQuery(query, {note, std::to_string(orderId)});
     }
     
     /**
@@ -320,23 +456,21 @@ public:
     /**
      * Валидация заказа через VALIDATE_ORDER
      */
-    std::pair<bool, String> validateOrder(Integer orderId) {
+    bool validateOrder(Integer orderId) {
         String query = "SELECT * FROM VALIDATE_ORDER($1)";
         
         auto result = db_->executeQuery(query, {std::to_string(orderId)});
         
         if (result->getRowCount() == 0) {
-            return {false, "Не удалось выполнить валидацию"};
+            return false;
         }
         
         // Предполагается, что процедура возвращает is_valid, error_message
         auto isValid = result->getValue(0, 0);
-        auto message = result->getValue(0, 1);
         
         bool valid = isValid && (*isValid == "t" || *isValid == "true" || *isValid == "1");
-        String msg = message ? *message : "";
         
-        return {valid, msg};
+        return valid;
     }
 
 private:
