@@ -1,7 +1,5 @@
 #pragma once
 
-#pragma once
-
 #include <core/TariffService.h>
 #include <db/Database.h>
 #include <db/DbApi.h>
