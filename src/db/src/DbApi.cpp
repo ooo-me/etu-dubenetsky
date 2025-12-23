@@ -1,7 +1,5 @@
 #include "DbApi.h"
 
-#include "DbApi.h"
-
 #include <fstream>
 #include <sstream>
 

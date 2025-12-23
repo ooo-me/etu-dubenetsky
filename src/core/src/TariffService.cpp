@@ -1,7 +1,5 @@
 #include "TariffService.h"
 
-#include "TariffService.h"
-
 namespace core
 {
 
@@ -604,7 +602,5 @@ std::vector<OptimalExecutor> TariffService::FindOptimalTariff(int orderId)
     return results;
 }
 
-} // #include "TariffService.h"
-
-namespace core
+} // namespace core
 
